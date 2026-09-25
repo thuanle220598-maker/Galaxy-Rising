@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1a39f68c2345be5b7b3bac84d3b463, type: 3}
+  m_Name: Krag
+  m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
+  skillKit: 4
+  basic:
+    displayName: Gravity Fist
+    description: Front-line attacks build energy through sustained contact.
+    cooldown: 0
+    actionDuration: 0.4
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 18
+  passive:
+    displayName: Last Bastion
+    description: Gain defense above 50% health and a large shield when critically
+      wounded.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  active:
+    displayName: Crushing Orbit
+    description: Damage and weaken an enemy while shielding Krag.
+    cooldown: 7
+    actionDuration: 0.58
+    hitFrame: 0.5
+    powerMultiplier: 1.15
+    energyGain: 0
+  ultimate:
+    displayName: Gravity Bulwark
+    description: Gain a massive shield and force all enemies to attack Krag.
+    cooldown: 0
+    actionDuration: 0.78
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0

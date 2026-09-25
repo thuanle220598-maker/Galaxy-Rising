@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1a39f68c2345be5b7b3bac84d3b463, type: 3}
+  m_Name: Drake
+  m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
+  skillKit: 12
+  basic:
+    displayName: Ember Claw
+    description: Every third strike applies a stacking burn pattern.
+    cooldown: 0
+    actionDuration: 0.34
+    hitFrame: 0.55
+    powerMultiplier: 1
+    energyGain: 18
+  passive:
+    displayName: Dragon Fury
+    description: Below 50% health, gain haste, attack and energy once per battle.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  active:
+    displayName: Dragon Dive
+    description: Burst and burn one enemy while shielding Drake.
+    cooldown: 6.5
+    actionDuration: 0.5
+    hitFrame: 0.58
+    powerMultiplier: 1.65
+    energyGain: 0
+  ultimate:
+    displayName: Cataclysm Roar
+    description: Damage, burn and weaken the entire enemy team.
+    cooldown: 0
+    actionDuration: 0.76
+    hitFrame: 0.55
+    powerMultiplier: 1.25
+    energyGain: 0

@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1a39f68c2345be5b7b3bac84d3b463, type: 3}
+  m_Name: Hex
+  m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
+  skillKit: 9
+  basic:
+    displayName: Forked Virus
+    description: Every third attack splashes to a second target.
+    cooldown: 0
+    actionDuration: 0.4
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 18
+  passive:
+    displayName: Persistent Corruption
+    description: Poison continues damaging targets after the initial hit.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  active:
+    displayName: Corruption Code
+    description: Poison a target and reduce its attack.
+    cooldown: 6.5
+    actionDuration: 0.56
+    hitFrame: 0.52
+    powerMultiplier: 0.85
+    energyGain: 0
+  ultimate:
+    displayName: Singularity Mine
+    description: Heavy damage followed by poison and slow.
+    cooldown: 0
+    actionDuration: 0.78
+    hitFrame: 0.52
+    powerMultiplier: 2.4
+    energyGain: 0

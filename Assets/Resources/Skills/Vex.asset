@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1a39f68c2345be5b7b3bac84d3b463, type: 3}
+  m_Name: Vex
+  m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
+  skillKit: 5
+  basic:
+    displayName: Backline Reap
+    description: Prioritize back-row targets and deal more damage to wounded enemies.
+    cooldown: 0
+    actionDuration: 0.3
+    hitFrame: 0.52
+    powerMultiplier: 1
+    energyGain: 18
+  passive:
+    displayName: Momentum
+    description: Kills grant haste and a large amount of energy.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  active:
+    displayName: Void Step
+    description: Burst a vulnerable back-row target and gain haste.
+    cooldown: 5
+    actionDuration: 0.46
+    hitFrame: 0.56
+    powerMultiplier: 1.7
+    energyGain: 0
+  ultimate:
+    displayName: Crimson Execute
+    description: Attack the weakest enemy; damage rises sharply below 30% health.
+    cooldown: 0
+    actionDuration: 0.64
+    hitFrame: 0.58
+    powerMultiplier: 2.4
+    energyGain: 0

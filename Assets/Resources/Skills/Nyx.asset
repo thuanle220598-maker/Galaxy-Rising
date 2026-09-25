@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1a39f68c2345be5b7b3bac84d3b463, type: 3}
+  m_Name: Nyx
+  m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
+  skillKit: 10
+  basic:
+    displayName: Drowning Verse
+    description: Every fourth attack drains enemy energy and restores Nyx's energy.
+    cooldown: 0
+    actionDuration: 0.4
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 18
+  passive:
+    displayName: Abyssal Choir
+    description: Supports the team safely from the back row.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  active:
+    displayName: Abyssal Hymn
+    description: Heal, cleanse and restore energy to the weakest ally.
+    cooldown: 6
+    actionDuration: 0.58
+    hitFrame: 0.48
+    powerMultiplier: 0.7
+    energyGain: 0
+  ultimate:
+    displayName: Night Bloom
+    description: Heal, cleanse, hasten and empower the entire team.
+    cooldown: 0
+    actionDuration: 0.82
+    hitFrame: 0.5
+    powerMultiplier: 0.55
+    energyGain: 0

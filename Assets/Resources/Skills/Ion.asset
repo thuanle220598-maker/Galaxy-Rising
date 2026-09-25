@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1a39f68c2345be5b7b3bac84d3b463, type: 3}
+  m_Name: Ion
+  m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
+  skillKit: 2
+  basic:
+    displayName: Arc Sequence
+    description: Every fourth hit chains lightning to another enemy.
+    cooldown: 0
+    actionDuration: 0.34
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 18
+  passive:
+    displayName: Phase Shift
+    description: Every fifth incoming hit is ignored and restores energy.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  active:
+    displayName: Static Field
+    description: Damage and stun the target, then arc to another enemy.
+    cooldown: 7
+    actionDuration: 0.5
+    hitFrame: 0.54
+    powerMultiplier: 0.9
+    energyGain: 0
+  ultimate:
+    displayName: Volt Rush
+    description: Strike three times and retarget whenever an enemy falls.
+    cooldown: 0
+    actionDuration: 0.68
+    hitFrame: 0.5
+    powerMultiplier: 0.85
+    energyGain: 0

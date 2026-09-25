@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1a39f68c2345be5b7b3bac84d3b463, type: 3}
+  m_Name: Rook
+  m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
+  skillKit: 6
+  basic:
+    displayName: Piercing Cycle
+    description: Every third shot ignores half of the target's defense.
+    cooldown: 0
+    actionDuration: 0.38
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 18
+  passive:
+    displayName: Ballistic Nest
+    description: Maintains safe back-row positioning and sustained fire.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  active:
+    displayName: Pinning Shot
+    description: Pierce armor and slow one enemy.
+    cooldown: 6.5
+    actionDuration: 0.54
+    hitFrame: 0.54
+    powerMultiplier: 1.5
+    energyGain: 0
+  ultimate:
+    displayName: Rail Barrage
+    description: Damage, pierce and slow every enemy.
+    cooldown: 0
+    actionDuration: 0.74
+    hitFrame: 0.52
+    powerMultiplier: 1.15
+    energyGain: 0

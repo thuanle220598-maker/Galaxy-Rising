@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d93c40d65fe4d0f8a2e0ab4bc2cf1d7, type: 3}
+  m_Name: Astra
+  m_EditorClassIdentifier: Assembly-CSharp::CombatantDefinition
+  displayName: Astra
+  species: 3
+  combatClass: 6
+  rarity: 1
+  bodyColor: {r: 0.2, g: 1, b: 0.62, a: 1}
+  maxHealth: 140
+  attack: 25
+  defense: 6
+  moveSpeed: 1.85
+  attackInterval: 1.15
+  skillKit: 3
+  formationOrder: 2
