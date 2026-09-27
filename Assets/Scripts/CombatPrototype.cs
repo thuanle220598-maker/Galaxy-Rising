@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 
 internal enum PrototypeTeam
@@ -283,6 +285,45 @@ internal static class PrototypeSession
         squadRows = null;
     }
 
+    public static void MigrateCharacterName(string oldName, string newName)
+    {
+        var json = PlayerPrefs.GetString(SquadKey, string.Empty);
+        if (!string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                var data = JsonUtility.FromJson<PrototypeSquadSave>(json);
+                if (data != null && data.names != null)
+                {
+                    for (var index = 0; index < data.names.Count; index++)
+                    {
+                        if (data.names[index] == oldName)
+                        {
+                            data.names[index] = newName;
+                        }
+                    }
+                    PlayerPrefs.SetString(SquadKey, JsonUtility.ToJson(data));
+                }
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogWarning($"Saved squad name migration was skipped: {exception.Message}");
+            }
+        }
+
+        if (squadNames != null)
+        {
+            for (var index = 0; index < squadNames.Length; index++)
+            {
+                if (squadNames[index] == oldName)
+                {
+                    squadNames[index] = newName;
+                }
+            }
+        }
+        PlayerPrefs.Save();
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetOnPlay()
     {
@@ -352,13 +393,15 @@ internal static class PrototypeSession
 public static class CombatPrototype
 {
     private const float SpawnX = 4.2f;
-    private const float FormationSpacing = 1.55f;
+    private const float FormationSpacing = 1.75f;
+    private const float EngagementSpacing = 1.5f;
     private static Sprite squareSprite;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Create()
     {
-        if (SceneManager.GetActiveScene().name != "SampleScene" ||
+        var scene = SceneManager.GetActiveScene();
+        if (!IsPrototypeScene(scene.name, scene.path) ||
             Object.FindFirstObjectByType<PrototypeBattle>() != null ||
             Object.FindFirstObjectByType<PrototypeSquadSetup>() != null ||
             Object.FindFirstObjectByType<PrototypeCharacterScreen>() != null ||
@@ -369,11 +412,11 @@ public static class CombatPrototype
 
         PrototypeSaveSystem.Migrate();
         var allyDefinitions = LoadDefinitions("Combatants/Allies");
-        var enemyDefinitions = LoadDefinitions("Combatants/Enemies");
+        var monsterDefinitions = LoadDefinitions("Combatants/Monsters");
         PrototypeSession.EnsureIdleClock();
-        if (allyDefinitions.Length == 0 || enemyDefinitions.Length == 0)
+        if (allyDefinitions.Length == 0 || monsterDefinitions.Length < 5)
         {
-            Debug.LogError("Combat prototype needs combatant definitions in Resources/Combatants.");
+            Debug.LogError("Combat prototype needs five allies and at least five PvE monsters in Resources/Combatants.");
             return;
         }
 
@@ -384,7 +427,7 @@ public static class CombatPrototype
         PrototypeFormationRow[] pendingRows;
         if (PrototypeSession.TryConsumeBattle(ownedRoster, out pendingSquad, out pendingRows))
         {
-            StartBattle(root.transform, pendingSquad, pendingRows, enemyDefinitions);
+            StartBattle(root.transform, pendingSquad, pendingRows);
         }
         else if (PrototypeSession.ConsumeSquadSetupRequest())
         {
@@ -410,7 +453,7 @@ public static class CombatPrototype
                         farmMode,
                         selected,
                         rows);
-                    StartBattle(root.transform, selected, rows, enemyDefinitions);
+                    StartBattle(root.transform, selected, rows);
                 });
         }
         else if (PrototypeSession.ConsumeCharacterScreenRequest())
@@ -434,7 +477,7 @@ public static class CombatPrototype
                 farmMode,
                 defaultSquad,
                 defaultRows);
-            StartBattle(root.transform, defaultSquad, defaultRows, enemyDefinitions);
+            StartBattle(root.transform, defaultSquad, defaultRows);
         }
 
         var camera = Camera.main;
@@ -465,6 +508,13 @@ public static class CombatPrototype
         }
     }
 
+    internal static bool IsPrototypeScene(string sceneName, string scenePath)
+    {
+        return sceneName == "SampleScene" ||
+            scenePath.StartsWith("Temp/__Backupscenes/", System.StringComparison.OrdinalIgnoreCase) &&
+            scenePath.EndsWith(".backup", System.StringComparison.OrdinalIgnoreCase);
+    }
+
     internal static PrototypeFormationRow[] GetDefaultRows(CombatantDefinition[] definitions)
     {
         var rows = new PrototypeFormationRow[definitions.Length];
@@ -479,8 +529,7 @@ public static class CombatPrototype
     private static void StartBattle(
         Transform root,
         CombatantDefinition[] allyDefinitions,
-        PrototypeFormationRow[] allyRows,
-        CombatantDefinition[] enemyDefinitions)
+        PrototypeFormationRow[] allyRows)
     {
         if (root.GetComponent<PrototypeBattle>() != null)
         {
@@ -492,6 +541,16 @@ public static class CombatPrototype
         var stage = PrototypeSession.Mode == PrototypeGameMode.Idle && PrototypeSession.IdleFarmMode
             ? Mathf.Max(1, PrototypeSession.IdleStage - 1)
             : PrototypeSession.IdleStage;
+        var encounterSeed = PrototypeSession.Mode == PrototypeGameMode.Dungeon
+            ? (int)PrototypeSession.DungeonType * 100 + PrototypeSession.DungeonLevel
+            : stage;
+        var enemyDefinitions = LoadEnemyDefinitionsForMode(PrototypeSession.Mode, encounterSeed);
+        if (enemyDefinitions.Length < 5)
+        {
+            Debug.LogError($"{PrototypeSession.Mode} needs at least five enemy definitions.");
+            Object.Destroy(root.gameObject);
+            return;
+        }
         var isBoss = PrototypeSession.Mode == PrototypeGameMode.Idle &&
             !PrototypeSession.IdleFarmMode && PrototypeContentCatalog.IsBossStage(stage);
         var dungeonDefinition = PrototypeContentCatalog.GetDungeon(PrototypeSession.DungeonType);
@@ -516,6 +575,7 @@ public static class CombatPrototype
             timeLimit,
             PrototypeSession.DungeonType,
             PrototypeSession.DungeonLevel);
+        PrototypeBattleFeedback.StartBattleLoop();
         root.gameObject.AddComponent<PrototypeHud>().Initialize(battle);
 
         Debug.Assert(allies.Length == 5 && enemies.Length == 5, "Battle must start as 5v5.");
@@ -524,8 +584,10 @@ public static class CombatPrototype
             PrototypeCombatClassRules.GetAttackRange(PrototypeCombatClass.Assassin),
             "Ranged classes must attack from farther away than melee classes.");
         Debug.Assert(!string.IsNullOrEmpty(allies[0].SkillDescription), "Each hero needs skill descriptions.");
-        Debug.Assert(PrototypeCombatant.CalculateDamage(20, 5, 1f, true) == 20, "Marked damage formula is invalid.");
-        Debug.Assert(PrototypeCombatant.CalculateDamage(20, 10, 1f, false, 0.5f) == 15, "Armor pierce formula is invalid.");
+        Debug.Assert(PrototypeFireCombat.CalculateDamage(
+            20, 5, 1f, PrototypeDamageType.Physical, 0f) == 15, "Physical damage formula is invalid.");
+        Debug.Assert(PrototypeFireCombat.CalculateDamage(
+            20, 10, 1f, PrototypeDamageType.Physical, 0f, 0.5f) == 15, "Armor pierce formula is invalid.");
     }
 
     internal static void RestartIdleBattle(GameObject currentRoot, bool farmMode)
@@ -555,7 +617,6 @@ public static class CombatPrototype
         bool farmMode)
     {
         var allyDefinitions = LoadDefinitions("Combatants/Allies");
-        var enemyDefinitions = LoadDefinitions("Combatants/Enemies");
         var roster = LoadRoster();
         var ownedRoster = PrototypeGacha.GetOwnedRoster(roster);
 
@@ -577,7 +638,7 @@ public static class CombatPrototype
         currentRoot.SetActive(false);
         Object.Destroy(currentRoot);
         var root = new GameObject("Combat Prototype");
-        StartBattle(root.transform, squad, rows, enemyDefinitions);
+        StartBattle(root.transform, squad, rows);
     }
 
     private static CombatantDefinition[] LoadDefinitions(string path)
@@ -597,6 +658,21 @@ public static class CombatPrototype
         roster.AddRange(enemies);
         roster.AddRange(reserve);
         return roster.ToArray();
+    }
+
+    internal static CombatantDefinition[] LoadEnemyDefinitionsForMode(PrototypeGameMode mode, int encounterSeed)
+    {
+        var pool = LoadDefinitions(mode == PrototypeGameMode.PvP
+            ? "Combatants/Enemies"
+            : "Combatants/Monsters");
+        var teamSize = Mathf.Min(5, pool.Length);
+        var team = new CombatantDefinition[teamSize];
+        var offset = pool.Length == 0 ? 0 : Mathf.Max(0, encounterSeed - 1) % pool.Length;
+        for (var index = 0; index < teamSize; index++)
+        {
+            team[index] = pool[(offset + index) % pool.Length];
+        }
+        return team;
     }
 
     private static PrototypeCombatant[] CreateTeam(
@@ -631,6 +707,7 @@ public static class CombatPrototype
                 SquareSprite,
                 statMultiplier,
                 bossLeader && index == 0);
+            units[index].SetEngagementOffset((index - center) * EngagementSpacing);
         }
 
         return units;
@@ -638,9 +715,28 @@ public static class CombatPrototype
 
     private static void CreateArena(Transform parent)
     {
-        CreateRectangle(parent, "Space", Vector3.zero, new Vector3(11f, 22f), new Color(0.035f, 0.06f, 0.13f), -20);
-        CreateRectangle(parent, "Battle Lane", Vector3.zero, new Vector3(9f, 8f), new Color(0.07f, 0.12f, 0.22f), -10);
-        CreateRectangle(parent, "Center Line", Vector3.zero, new Vector3(0.06f, 7.6f), new Color(0.2f, 0.75f, 0.9f, 0.45f), -5);
+        CreateRectangle(parent, "Deep Space", Vector3.zero, new Vector3(11f, 22f), new Color(0.018f, 0.028f, 0.075f), -30);
+        CreateRectangle(parent, "Nebula Left", new Vector3(-3.5f, 2.2f), new Vector3(3.4f, 15f), new Color(0.12f, 0.08f, 0.28f, 0.55f), -28);
+        CreateRectangle(parent, "Nebula Right", new Vector3(3.8f, -1.8f), new Vector3(2.8f, 14f), new Color(0.02f, 0.25f, 0.32f, 0.38f), -27);
+
+        var starfield = new GameObject("Starfield");
+        starfield.transform.SetParent(parent);
+        var stars = new[]
+        {
+            new Vector3(-4.4f, 9.2f), new Vector3(-2.8f, 6.8f), new Vector3(0.6f, 8.5f),
+            new Vector3(4.1f, 7.4f), new Vector3(-4.6f, 3.5f), new Vector3(3.2f, 4.4f),
+            new Vector3(-3.8f, -4.7f), new Vector3(1.3f, -6.4f), new Vector3(4.5f, -8.2f)
+        };
+        for (var index = 0; index < stars.Length; index++)
+        {
+            var size = index % 3 == 0 ? 0.11f : 0.06f;
+            CreateRectangle(starfield.transform, $"Star {index + 1}", stars[index], new Vector3(size, size), new Color(0.65f, 0.9f, 1f, 0.8f), -25);
+        }
+
+        CreateRectangle(parent, "Battle Deck", Vector3.zero, new Vector3(9.4f, 9.2f), new Color(0.035f, 0.075f, 0.14f), -15);
+        CreateRectangle(parent, "Battle Lane", Vector3.zero, new Vector3(8.8f, 8.6f), new Color(0.065f, 0.12f, 0.22f), -14);
+        CreateRectangle(parent, "Lane Edge Top", new Vector3(0f, 4.25f), new Vector3(8.9f, 0.08f), new Color(0.25f, 0.78f, 0.95f, 0.55f), -12);
+        CreateRectangle(parent, "Lane Edge Bottom", new Vector3(0f, -4.25f), new Vector3(8.9f, 0.08f), new Color(0.25f, 0.78f, 0.95f, 0.55f), -12);
     }
 
     private static void CreateRectangle(
@@ -867,10 +963,24 @@ internal sealed class PrototypeBattle : MonoBehaviour
 
     public PrototypeCombatant FindTarget(PrototypeCombatant source)
     {
-        var preferredRow = source.CombatClass == PrototypeCombatClass.Assassin
-            ? PrototypeFormationRow.Back
-            : PrototypeFormationRow.Front;
-        return FindClosestEnemy(source, preferredRow) ?? FindClosestEnemy(source);
+        var preferredRow = PreferredTargetRow(source.CombatClass);
+        return preferredRow.HasValue
+            ? FindClosestEnemy(source, preferredRow) ?? FindClosestEnemy(source)
+            : FindClosestEnemy(source);
+    }
+
+    internal static PrototypeFormationRow? PreferredTargetRow(PrototypeCombatClass combatClass)
+    {
+        switch (combatClass)
+        {
+            case PrototypeCombatClass.Tanker:
+            case PrototypeCombatClass.Fighter:
+                return PrototypeFormationRow.Front;
+            case PrototypeCombatClass.Assassin:
+                return PrototypeFormationRow.Back;
+            default:
+                return null;
+        }
     }
 
     private PrototypeCombatant FindClosestEnemy(PrototypeCombatant source, PrototypeFormationRow? row)
@@ -1032,17 +1142,95 @@ internal sealed class PrototypeBattle : MonoBehaviour
     }
 }
 
+internal static class PrototypeStatusIconArt
+{
+    private const int Size = 12;
+    private const int GlyphSize = 8;
+    private const float PixelsPerUnit = 32f;
+    private static Sprite[] cache;
+
+    public static Sprite[] Get()
+    {
+        if (cache != null && cache[0] != null)
+        {
+            return cache;
+        }
+
+        cache = new[]
+        {
+            Create("Shield", new Color32(80, 220, 255, 255), "........", "..####..", ".######.", ".######.", ".######.", "..####..", "...##...", "........"),
+            Create("Stun", new Color32(255, 225, 70, 255), "...##...", "..##....", "..###...", ".#####..", "...##...", "..##....", "..#.....", "........"),
+            Create("Burn", new Color32(255, 100, 30, 255), "...#....", "..##....", ".####...", ".#####..", "######..", ".####...", "..##....", "........"),
+            Create("Poison", new Color32(120, 255, 80, 255), "..#..#..", "...##...", "..####..", ".######.", ".##..##.", ".######.", "..####..", "........"),
+            Create("Slow", new Color32(110, 190, 255, 255), "...##...", ".#.##.#.", "..####..", "########", "########", "..####..", ".#.##.#.", "...##..."),
+            Create("Haste", new Color32(80, 255, 210, 255), ".##..##.", "..##..##", "...##..#", "..##..##", ".##..##.", "..##..##", "...##..#", "........"),
+            Create("Attack Up", new Color32(120, 255, 140, 255), "...#..#.", "..##.###", ".###..#.", "..##....", "..##....", ".####...", "..##....", "........"),
+            Create("Attack Down", new Color32(255, 90, 90, 255), "..##....", ".####...", "..##....", "..##....", ".###....", "..##....", "....###.", "........"),
+            Create("Taunt", new Color32(255, 75, 130, 255), "..####..", "..####..", "..####..", "...##...", "...##...", "........", "...##...", "........"),
+            Create("Ash", new Color32(255, 105, 30, 255), "...##...", "..####..", ".##..##.", "##.##.##", ".######.", "..####..", "...##...", "........"),
+            Create("Heat", new Color32(255, 55, 20, 255), "..#..#..", ".##.##..", "..###...", ".#####..", "#######.", ".#####..", "..###...", "........"),
+            Create("Grounded", new Color32(210, 145, 70, 255), "........", "..####..", ".######.", "########", "..#..#..", ".##..##.", "##....##", "........")
+        };
+        return cache;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetCache()
+    {
+        cache = null;
+    }
+
+    private static Sprite Create(string name, Color32 color, params string[] rows)
+    {
+        var texture = new Texture2D(Size, Size, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Point,
+            wrapMode = TextureWrapMode.Clamp,
+            name = name + " Status Icon"
+        };
+        var pixels = new Color32[Size * Size];
+        var background = new Color32(5, 10, 20, 230);
+        for (var index = 0; index < pixels.Length; index++)
+        {
+            pixels[index] = background;
+        }
+        for (var y = 0; y < GlyphSize; y++)
+        {
+            for (var x = 0; x < GlyphSize; x++)
+            {
+                if (rows[GlyphSize - 1 - y][x] == '#')
+                {
+                    pixels[(y + 2) * Size + x + 2] = color;
+                }
+            }
+        }
+        pixels[0] = pixels[Size - 1] = pixels[(Size - 1) * Size] = pixels[Size * Size - 1] = default;
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        var sprite = Sprite.Create(texture, new Rect(0f, 0f, Size, Size), new Vector2(0.5f, 0.5f), PixelsPerUnit);
+        sprite.name = name + " Status Icon";
+        return sprite;
+    }
+}
+
 internal sealed class PrototypeCombatant : MonoBehaviour
 {
+    private struct AshState
+    {
+        public int stacks;
+        public float remaining;
+    }
+
     private const float MaxEnergy = 100f;
     private const float HealthBarWidth = 1.45f;
-    private const float BodySize = 1.05f;
+    private const float BodySize = 1.05f * 2.2f;
     private const float BasicActionDuration = 0.36f;
     private const float BasicHitDelay = 0.18f;
     private const float SkillActionDuration = 0.52f;
     private const float SkillHitDelay = 0.27f;
     private const float UltimateActionDuration = 0.72f;
     private const float UltimateHitDelay = 0.38f;
+    private const float ArenaHalfExtent = 4.2f;
 
     private PrototypeBattle battle;
     private CombatantDefinition definition;
@@ -1054,6 +1242,16 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private SpriteRenderer energyFill;
     private SpriteRenderer shieldVisual;
     private SpriteRenderer markVisual;
+    private SpriteRenderer burnVisual;
+    private SpriteRenderer heatAura;
+    private SpriteRenderer ultimateReadyVisual;
+    private SpriteRenderer bossPhaseAura;
+    private SpriteRenderer bossOrbit;
+    private PrototypeFireVfx heatVfx;
+    private PrototypeFireVfx flameShieldVfx;
+    private SpriteRenderer[] statusIcons;
+    private TextMesh[] statusCounts;
+    private SortingGroup sortingGroup;
     private Color bodyColor;
     private float bodySize = BodySize;
     private float attackCooldown;
@@ -1061,19 +1259,33 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private float skillPulse;
     private float hitFlash;
     private float animationTime;
-    private float actionLockRemaining;
+    private float afterimageCooldown;
     private float actionHitRemaining;
     private float energy;
     private int currentShield;
     private float shieldRemaining;
-    private float markRemaining;
     private float hasteRemaining;
     private float slowRemaining;
+    private float movementSlowPercent;
+    private float movementSlowRemaining;
+    private float decayingSlowStart;
+    private float decayingSlowDuration;
+    private float decayingSlowElapsed;
+    private float groundedRemaining;
+    private float airborneRemaining;
+    private float airborneDuration;
+    private float knockbackRemaining;
+    private float knockbackDuration;
+    private Vector3 knockbackStart;
+    private Vector3 knockbackEnd;
     private float tauntRemaining;
     private float stunRemaining;
     private float burnRemaining;
     private float burnTickCooldown;
-    private int burnDamage;
+    private float burnTickInterval = 1f;
+    private int burnTickDamage;
+    private PrototypeDamageType burnDamageType = PrototypeDamageType.Fire;
+    private float fireDotMarkerRemaining;
     private float poisonRemaining;
     private float poisonTickCooldown;
     private int poisonDamage;
@@ -1081,6 +1293,9 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private float attackDebuffRemaining;
     private float activeSkillCooldown;
     private float abilityPowerMultiplier = 1f;
+    private float guardLinkRemaining;
+    private float flameShieldCooldown;
+    private float engagementOffset;
     private int currentHealth;
     private int basicSkillLevel = 1;
     private int passiveSkillLevel = 1;
@@ -1088,15 +1303,21 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private int ultimateSkillLevel = 1;
     private int basicAttackCount;
     private int incomingHitCount;
-    private bool reactorTriggered;
     private bool sanctuaryTriggered;
     private bool lastBastionTriggered;
     private bool furyTriggered;
     private bool isMoving;
-    private PrototypeCombatant markedBy;
+    private bool isUltimateAction;
+    private bool bossPhaseTriggered;
+    private bool deathVisualsHidden;
     private PrototypeCombatant forcedTarget;
+    private PrototypeCombatant guardLinkTarget;
     private PrototypeCombatant burnSource;
     private PrototypeCombatant poisonSource;
+    private readonly Dictionary<PrototypeCombatant, AshState> ashBySource =
+        new Dictionary<PrototypeCombatant, AshState>();
+    private readonly List<PrototypeCombatant> ashSources = new List<PrototypeCombatant>();
+    private int heatStacks;
     private System.Action pendingAction;
     private PrototypeAnimationState animationState;
     private Vector3 spawnPosition;
@@ -1116,6 +1337,23 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     public float AttackInterval { get; private set; }
     public int CurrentHealth => currentHealth;
     public int CurrentShield => currentShield;
+    internal bool HasBurn => burnRemaining > 0f || fireDotMarkerRemaining > 0f;
+    internal bool HasShield => currentShield > 0;
+    public int HeatStacks => heatStacks;
+    public float FireDamageMultiplier => 1f + heatStacks * 0.05f;
+    public float MovementSpeedMultiplier => 1f + heatStacks * 0.04f;
+    public float FireResistance
+    {
+        get
+        {
+            var stacks = 0;
+            foreach (var state in ashBySource.Values)
+            {
+                stacks += state.stacks;
+            }
+            return stacks * -0.05f;
+        }
+    }
     public float Energy => energy;
     public float ActiveSkillCooldown => activeSkillCooldown;
     public int DamageDealt { get; private set; }
@@ -1133,10 +1371,13 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         get
         {
             var status = currentShield > 0 ? "Shield " : string.Empty;
-            if (stunRemaining > 0f) status += "Stun ";
+            if (stunRemaining > 0f || airborneRemaining > 0f) status += "Stun ";
+            if (TotalAshStacks > 0) status += $"Ash {TotalAshStacks} ";
             if (burnRemaining > 0f) status += "Burn ";
             if (poisonRemaining > 0f) status += "Poison ";
-            if (slowRemaining > 0f) status += "Slow ";
+            if (slowRemaining > 0f || CurrentMovementSlow > 0f) status += "Slow ";
+            if (groundedRemaining > 0f) status += "Grounded ";
+            if (heatStacks > 0) status += $"Heat {heatStacks} ";
             if (hasteRemaining > 0f) status += "Haste ";
             if (attackBuffRemaining > 0f) status += "ATK+ ";
             if (attackDebuffRemaining > 0f) status += "ATK- ";
@@ -1156,7 +1397,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             switch (SkillKit)
             {
                 case PrototypeSkillKit.Nova:
-                    return "Basic: every 3rd hit marks the target (+25% Nova damage).\nPassive: shield at 50% HP; faster attacks and energy below 35%.\nActive: Solar Thrust deals damage, marks and shields Nova.\nUltimate: Stellar Breaker hits one target heavily and splashes all enemies.";
+                    return "Basic: Fire attacks build Ash and detonate at three stacks.\nPassives: Ash lowers Fire Resistance, Heat empowers Fire damage, and Fire DoT kills spread embers.\nActive: Hellfire Impact creates a slowing Magma Pool.\nUltimate: Crimson Gale consumes Ash and turns Magma into Firestorm.";
                 case PrototypeSkillKit.Ion:
                     return "Basic: every 4th hit chains lightning.\nPassive: every 5th incoming hit is phased and grants energy.\nActive: Static Field damages, stuns and chains.\nUltimate: Volt Rush strikes three times and retargets after kills.";
                 case PrototypeSkillKit.Astra:
@@ -1235,23 +1476,45 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         bodyColor = definition.BodyColor;
         battle = battleManager;
         prototypeSprite = sprite;
-        characterSprites = PrototypePixelArt.Create(definition);
-        bodySize = isBoss ? BodySize * 1.25f : BodySize;
+        characterSprites = PrototypePixelArt.Create(definition, isBoss);
+        bodySize = isBoss ? BodySize * 1.35f : BodySize;
         spawnPosition = transform.position;
 
+        sortingGroup = gameObject.AddComponent<SortingGroup>();
+        UpdateSortingOrder();
+        var shadow = CreateSprite(
+            "Body Shadow",
+            characterSprites.Idle[0],
+            new Color(0f, 0f, 0f, 0.42f),
+            new Vector3(bodySize * 0.72f, bodySize * 0.18f, 1f),
+            -4);
+        shadow.transform.localPosition = new Vector3(0f, -bodySize * 0.38f);
+
         body = CreateSprite("Body", characterSprites.Idle[0], Color.white, new Vector3(bodySize, bodySize), 2);
-        body.flipX = Team == PrototypeTeam.Enemies;
+        body.flipX = ShouldFlipSprite(Team == PrototypeTeam.Enemies, definition.SourceFacesLeft);
+        if (IsBoss)
+        {
+            CreateBossVisuals();
+        }
         CreateHealthBar(sprite);
         CreateSkillVisuals(sprite);
+        CreateStatusIcons();
 
-        Debug.Assert(characterSprites.Attack.Length >= 4 && characterSprites.Skill.Length >= 4,
+        Debug.Assert(characterSprites.Attack.Length >= 4 && characterSprites.Skill.Length >= 4 &&
+            characterSprites.Ultimate.Length >= 4,
             "Combat actions need enough frames to expose a clear hit frame.");
         Debug.Assert(BasicHitDelay < BasicActionDuration && SkillHitDelay < SkillActionDuration &&
             UltimateHitDelay < UltimateActionDuration, "Action hit frames must occur before actions finish.");
     }
 
+    internal void SetEngagementOffset(float offset)
+    {
+        engagementOffset = offset;
+    }
+
     internal void ResetForFarmWave()
     {
+        StopAllCoroutines();
         transform.position = spawnPosition;
         currentHealth = MaxHealth;
         energy = 0f;
@@ -1260,33 +1523,53 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         attackPulse = 0f;
         skillPulse = 0f;
         hitFlash = 0f;
-        actionLockRemaining = 0f;
         actionHitRemaining = 0f;
         pendingAction = null;
+        isUltimateAction = false;
         animationState = PrototypeAnimationState.Idle;
         animationTime = 0f;
+        deathVisualsHidden = false;
+        SetCombatVisualsVisible(true);
         hasteRemaining = 0f;
         slowRemaining = 0f;
+        movementSlowPercent = 0f;
+        movementSlowRemaining = 0f;
+        decayingSlowStart = 0f;
+        decayingSlowDuration = 0f;
+        decayingSlowElapsed = 0f;
+        groundedRemaining = 0f;
+        airborneRemaining = 0f;
+        airborneDuration = 0f;
+        knockbackRemaining = 0f;
         tauntRemaining = 0f;
         stunRemaining = 0f;
         attackBuffRemaining = 0f;
         attackDebuffRemaining = 0f;
-        markRemaining = 0f;
-        markedBy = null;
+        ashBySource.Clear();
+        heatStacks = 0;
+        flameShieldCooldown = 0f;
+        fireDotMarkerRemaining = 0f;
         forcedTarget = null;
+        guardLinkTarget = null;
+        guardLinkRemaining = 0f;
         Target = null;
         basicAttackCount = 0;
         incomingHitCount = 0;
-        reactorTriggered = false;
         sanctuaryTriggered = false;
         lastBastionTriggered = false;
         furyTriggered = false;
         CleanseNegativeStatuses();
         DisableShield();
+        PrototypeFireZone.DestroyOwnedBy(this);
         markVisual.enabled = false;
+        burnVisual.enabled = false;
+        if (heatAura != null) heatAura.enabled = false;
+        bossPhaseTriggered = false;
+        UpdateBossPhaseVisuals();
         body.color = Color.white;
         UpdateHealthBar();
         UpdateEnergyBar();
+        UpdateStatusIcons();
     }
 
     private void Update()
@@ -1301,15 +1584,9 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             return;
         }
 
-        if (actionLockRemaining > 0f)
-        {
-            UpdateFeedback();
-            return;
-        }
-
         CheckAstraSanctuary();
 
-        if (stunRemaining > 0f)
+        if (stunRemaining > 0f || airborneRemaining > 0f)
         {
             UpdateFeedback();
             return;
@@ -1331,26 +1608,46 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }
 
         attackCooldown -= Time.deltaTime;
-        var horizontalDistance = Target.transform.position.x - transform.position.x;
-        if (Mathf.Abs(horizontalDistance) > AttackRange)
+        var targetPosition = Target.transform.position;
+        var targetDelta = targetPosition - transform.position;
+        var stoppingDistance = CombatStoppingDistance(AttackRange, bodySize, Target.bodySize);
+        if (Mathf.Abs(targetDelta.x) > 0.01f)
         {
-            transform.position += Vector3.right * (Mathf.Sign(horizontalDistance) * MoveSpeed * Time.deltaTime);
+            body.flipX = ShouldFlipSprite(targetDelta.x < 0f, definition.SourceFacesLeft);
+        }
+
+        var attackRangeWithTolerance = stoppingDistance + 0.001f;
+        var outsideAttackRange = targetDelta.sqrMagnitude > attackRangeWithTolerance * attackRangeWithTolerance;
+        if (outsideAttackRange)
+        {
+            var engagementPoint = ClampToArena(CalculateEngagementPoint(
+                transform.position,
+                targetPosition,
+                stoppingDistance,
+                engagementOffset));
+            transform.position = Vector3.MoveTowards(
+                transform.position,
+                engagementPoint,
+                MoveSpeed * MovementSpeedMultiplier * (1f - CurrentMovementSlow) * Time.deltaTime);
             isMoving = true;
             UpdateFeedback();
             return;
         }
 
-        if (SkillKit != PrototypeSkillKit.None && energy >= MaxEnergy)
+        if (pendingAction == null)
         {
-            StartUltimate();
-        }
-        else if (SkillKit != PrototypeSkillKit.None && activeSkillCooldown <= 0f)
-        {
-            StartActiveSkill();
-        }
-        else if (attackCooldown <= 0f)
-        {
-            StartBasicAttack();
+            if (SkillKit != PrototypeSkillKit.None && energy >= MaxEnergy)
+            {
+                StartUltimate();
+            }
+            else if (SkillKit != PrototypeSkillKit.None && activeSkillCooldown <= 0f)
+            {
+                StartActiveSkill();
+            }
+            else if (attackCooldown <= 0f)
+            {
+                StartBasicAttack();
+            }
         }
 
         UpdateFeedback();
@@ -1359,6 +1656,29 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private void StartBasicAttack()
     {
         attackCooldown = EffectiveAttackInterval;
+        if (Target != null && AttackRange >= 3f)
+        {
+            var hitDelay = ConfiguredHitDelay(skills == null ? null : skills.Basic, BasicHitDelay);
+            if (SkillKit == PrototypeSkillKit.Nova)
+            {
+                PrototypeFireVfx.SpawnTravel(
+                    "FireGodFlameProjectile",
+                    transform.position + Vector3.up * 0.12f,
+                    Target.transform.position,
+                    hitDelay,
+                    0.75f,
+                    112);
+            }
+            else
+            {
+                PrototypeProjectile.Spawn(
+                    prototypeSprite,
+                    transform.position + Vector3.up * 0.12f,
+                    Target.transform.position,
+                    SkillAccent,
+                    hitDelay);
+            }
+        }
         BeginAction(
             PerformBasicAttack,
             SkillDuration(skills == null ? null : skills.Basic, BasicActionDuration),
@@ -1376,18 +1696,21 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
         abilityPowerMultiplier = BasicSkillMultiplier;
         basicAttackCount++;
+        if (SkillKit == PrototypeSkillKit.Nova)
+        {
+            PerformFireGodBasic();
+            abilityPowerMultiplier = 1f;
+            return;
+        }
         var defenseIgnore = SkillKit == PrototypeSkillKit.Rook && basicAttackCount % 3 == 0 ? 0.5f : 0f;
         DealDamage(Target, SkillPower(skills == null ? null : skills.Basic, 1f), defenseIgnore);
         var basicEnergy = skills != null && skills.Basic != null && skills.Basic.EnergyGain > 0
             ? skills.Basic.EnergyGain
             : 18f;
-        GainEnergy(SkillKit == PrototypeSkillKit.Nova && IsLastLightActive ? basicEnergy * 1.5f : basicEnergy);
+        GainEnergy(basicEnergy);
 
         switch (SkillKit)
         {
-            case PrototypeSkillKit.Nova when basicAttackCount % 3 == 0 && Target.IsAlive:
-                Target.ApplyPhotonMark(this);
-                break;
             case PrototypeSkillKit.Ion when basicAttackCount % 4 == 0:
                 TriggerArcChain();
                 break;
@@ -1424,6 +1747,77 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         abilityPowerMultiplier = 1f;
     }
 
+    private void PerformFireGodBasic()
+    {
+        if (!AcquireTarget())
+        {
+            return;
+        }
+
+        var target = Target;
+        var center = target.transform.position;
+        var empowered = target.AshStacksFrom(this) >= 3;
+        if (empowered)
+        {
+            target.ConsumeAsh(this);
+            PrototypeFireVfx.Spawn("FireGodAshWarning", center, 0.05f, 1.45f, false, 111);
+        }
+
+        DealDamage(
+            target,
+            SkillPower(skills == null ? null : skills.Basic, 1f),
+            PrototypeDamageType.Fire);
+        PrototypeFireVfx.Spawn("FireGodFlameImpact", center, 0.055f, 0.9f, false, 112);
+        var basicEnergy = skills != null && skills.Basic != null && skills.Basic.EnergyGain > 0
+            ? skills.Basic.EnergyGain
+            : 18f;
+        GainEnergy(basicEnergy);
+        if (!target.IsAlive)
+        {
+            return;
+        }
+
+        if (!empowered)
+        {
+            target.ApplyAsh(this, 1);
+            return;
+        }
+
+        DealFireArea(center, 1.5f, 0.45f, PrototypeDamageFlags.AshDetonation);
+        StartCoroutine(DelayedFireArea(
+            center, 1.5f, 0.75f, 0.35f, PrototypeDamageFlags.AshDetonation));
+    }
+
+    private void DealFireArea(
+        Vector3 center,
+        float radius,
+        float multiplier,
+        PrototypeDamageFlags flags)
+    {
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            if (enemy.IsAlive && PrototypeFireCombat.PointInCircle(enemy.transform.position, center, radius))
+            {
+                DealDamage(enemy, multiplier, PrototypeDamageType.Fire, flags);
+            }
+        }
+    }
+
+    private IEnumerator DelayedFireArea(
+        Vector3 center,
+        float radius,
+        float multiplier,
+        float delay,
+        PrototypeDamageFlags flags)
+    {
+        yield return new WaitForSeconds(delay);
+        if (battle != null && !battle.IsFinished)
+        {
+            DealFireArea(center, radius, multiplier, flags);
+            PrototypeFireVfx.Spawn("FireGodAshDetonation", center, 0.055f, 1.25f, false, 113);
+        }
+    }
+
     private void StartActiveSkill()
     {
         activeSkillCooldown = ActiveSkillInterval;
@@ -1450,24 +1844,22 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         switch (SkillKit)
         {
             case PrototypeSkillKit.Nova:
-                battle.Announce("NOVA  ·  SOLAR THRUST");
-                DealDamage(Target, SkillPower(skills == null ? null : skills.Active, 1.45f));
-                if (Target.IsAlive) Target.ApplyPhotonMark(this);
-                GrantShield(Mathf.RoundToInt(MaxHealth * 0.12f), 4f);
+                CastHellfireImpact();
                 break;
             case PrototypeSkillKit.Ion:
                 battle.Announce("ION  ·  STATIC FIELD");
                 DealDamage(Target, SkillPower(skills == null ? null : skills.Active, 0.9f));
                 if (Target.IsAlive) Target.ApplyStun(1f);
-                HitSecondaryTarget(0.45f);
+                HitSecondaryTarget(0.45f, true);
                 break;
             case PrototypeSkillKit.Astra:
                 battle.Announce("ASTRA  ·  STAR WARD");
                 var wounded = battle.FindLowestHealth(battle.GetTeam(Team));
                 if (wounded != null)
                 {
-                    wounded.Heal(Mathf.RoundToInt(EffectiveAttack * 0.8f));
+                    wounded.HealAndReinforce(Mathf.RoundToInt(EffectiveAttack * 0.8f));
                     wounded.GrantShield(Mathf.RoundToInt(wounded.MaxHealth * 0.15f), 5f);
+                    PrototypeEffect.SpawnBarrier(prototypeSprite, wounded.transform.position, SkillAccent, 0.5f);
                 }
                 break;
             case PrototypeSkillKit.Krag:
@@ -1499,6 +1891,15 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 {
                     guarded.GrantShield(Mathf.RoundToInt(guarded.MaxHealth * 0.25f), 5f);
                     guarded.ApplyAttackBuff(4f);
+                    guardLinkTarget = guarded;
+                    guardLinkRemaining = 5f;
+                    PrototypeEffect.SpawnLine(
+                        prototypeSprite,
+                        transform.position,
+                        guarded.transform.position,
+                        SkillAccent,
+                        0.34f,
+                        0.08f);
                 }
                 break;
             case PrototypeSkillKit.Hex:
@@ -1555,7 +1956,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private void PerformUltimate()
     {
         abilityPowerMultiplier = UltimateSkillMultiplier;
-        if ((SkillKit == PrototypeSkillKit.Nova || SkillKit == PrototypeSkillKit.Hex) && !AcquireTarget())
+        if (SkillKit == PrototypeSkillKit.Hex && !AcquireTarget())
         {
             abilityPowerMultiplier = 1f;
             return;
@@ -1564,7 +1965,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         switch (SkillKit)
         {
             case PrototypeSkillKit.Nova:
-                CastStellarBreaker();
+                CastCrimsonGale();
                 break;
             case PrototypeSkillKit.Ion:
                 CastVoltRush();
@@ -1612,12 +2013,22 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         bool ultimate)
     {
         pendingAction = action;
-        actionLockRemaining = duration;
         actionHitRemaining = hitDelay;
+        isUltimateAction = ultimate;
         if (skill)
         {
             skillPulse = duration;
-            PrototypeBattleFeedback.PlayAction(ultimate);
+            PrototypeBattleFeedback.PlayAction(SkillKit, ultimate);
+            if (IsBoss)
+            {
+                PrototypeEffect.Spawn(
+                    prototypeSprite,
+                    transform.position,
+                    SkillAccent,
+                    ultimate ? 0.5f : 0.3f,
+                    ultimate ? 1.9f : 1.3f,
+                    Mathf.Min(duration, 0.45f));
+            }
         }
         else
         {
@@ -1627,7 +2038,6 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private void UpdatePendingAction()
     {
-        actionLockRemaining = Mathf.Max(0f, actionLockRemaining - Time.deltaTime);
         if (pendingAction == null)
         {
             return;
@@ -1649,37 +2059,93 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private bool AcquireTarget()
     {
-        if (Target == null || !Target.IsAlive)
+        return Target != null && Target.IsAlive;
+    }
+
+    private void CastHellfireImpact()
+    {
+        battle.Announce("FIRE GOD - HELLFIRE IMPACT");
+        var point = Target.transform.position;
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            if (!enemy.IsAlive || !PrototypeFireCombat.PointInCircle(enemy.transform.position, point, 1.8f))
+            {
+                continue;
+            }
+
+            DealDamage(
+                enemy,
+                SkillPower(skills == null ? null : skills.Active, 1.45f),
+                PrototypeDamageType.Fire);
+            if (enemy.IsAlive)
+            {
+                enemy.ApplyKnockUp(0.28f);
+                enemy.ApplyAsh(this, 1);
+            }
+        }
+
+        PrototypeFireVfx.Spawn("FireGodHellfireImpact", point, 0.065f, 1.35f, false, 112);
+        PrototypeFireZone.SpawnMagma(this, battle, prototypeSprite, point, 1.8f, 4f, 0.5f, 0.18f);
+    }
+
+    private void CastCrimsonGale()
+    {
+        if (!AcquireTarget())
         {
             Target = battle.FindTarget(this);
         }
+        if (!AcquireTarget())
+        {
+            return;
+        }
 
-        return Target != null;
-    }
-
-    private void CastStellarBreaker()
-    {
-        battle.Announce("NOVA  ·  STELLAR BREAKER");
-
-        var primaryTarget = Target;
-        DealDamage(primaryTarget, SkillPower(skills == null ? null : skills.Ultimate, 2.2f));
-        PrototypeEffect.Spawn(prototypeSprite, primaryTarget.transform.position, bodyColor, 0.45f, 2.2f, 0.45f);
-
+        battle.Announce("FIRE GOD - CRIMSON GALE");
+        var origin = transform.position;
+        var direction = (Target.transform.position - origin).normalized;
         foreach (var enemy in battle.GetOpponents(Team))
         {
-            if (enemy != primaryTarget && enemy.IsAlive)
+            if (!enemy.IsAlive || !PrototypeFireCombat.PointInCone(
+                    enemy.transform.position, origin, direction, 7f, 35f))
             {
-                DealDamage(enemy, 0.7f);
-                PrototypeEffect.Spawn(prototypeSprite, enemy.transform.position, bodyColor, 0.3f, 1.4f, 0.35f);
+                continue;
+            }
+
+            var stacks = enemy.ConsumeAsh(this);
+            if (stacks > 0)
+            {
+                DealFlatDamage(
+                    enemy,
+                    PrototypeFireCombat.MissingHealthDetonation(enemy.MaxHealth, enemy.CurrentHealth, stacks),
+                    PrototypeDamageType.Fire,
+                    PrototypeDamageFlags.AshDetonation);
+            }
+            DealDamage(
+                enemy,
+                SkillPower(skills == null ? null : skills.Ultimate, 2.2f),
+                PrototypeDamageType.Fire);
+            if (enemy.IsAlive)
+            {
+                enemy.ApplyKnockback(direction, 1.6f);
+                enemy.ApplyAsh(this, 1);
             }
         }
+
+        PrototypeFireVfx.SpawnCrimsonGale(origin, direction);
+        PrototypeFireZone.SpawnScorch(
+            this, battle, prototypeSprite, origin, direction, 7f, 35f, 5f, 0.5f, 0.12f);
+        PrototypeFireZone.ConvertIntersectingMagmaPools(this, origin, direction, 7f, 35f);
     }
 
     private void CastVoltRush()
     {
         battle.Announce("ION  ·  VOLT RUSH");
-        for (var hit = 0; hit < 3; hit++)
+        var power = SkillPower(skills == null ? null : skills.Ultimate, 0.85f) * UltimateSkillMultiplier;
+        StartCoroutine(RunTimedSequence(3, 0.11f, hit =>
         {
+            if (!IsAlive || battle.IsFinished)
+            {
+                return;
+            }
             if (Target == null || !Target.IsAlive)
             {
                 Target = battle.FindTarget(this);
@@ -1687,12 +2153,12 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
             if (Target == null)
             {
-                break;
+                return;
             }
 
-            DealDamage(Target, SkillPower(skills == null ? null : skills.Ultimate, 0.85f));
+            DealDamage(Target, power);
             PrototypeEffect.Spawn(prototypeSprite, Target.transform.position, bodyColor, 0.2f, 0.9f, 0.2f);
-        }
+        }));
     }
 
     private void CastAstralRenewal()
@@ -1705,15 +2171,15 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         {
             if (ally.IsAlive)
             {
-                ally.Heal(Mathf.RoundToInt(EffectiveAttack * 0.35f));
+                ally.HealAndReinforce(Mathf.RoundToInt(EffectiveAttack * 0.35f));
             }
         }
 
         if (primary != null)
         {
-            primary.Heal(EffectiveAttack);
+            primary.HealAndReinforce(EffectiveAttack);
             primary.GrantShield(Mathf.RoundToInt(primary.MaxHealth * 0.2f), 5f);
-            PrototypeEffect.Spawn(prototypeSprite, primary.transform.position, bodyColor, 0.5f, 1.8f, 0.45f);
+            PrototypeEffect.SpawnBarrier(prototypeSprite, primary.transform.position, SkillAccent, 0.65f);
         }
     }
 
@@ -1750,29 +2216,69 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private void CastRailBarrage()
     {
         battle.Announce("ROOK  ·  RAIL BARRAGE");
+        var targets = new List<PrototypeCombatant>();
         foreach (var enemy in battle.GetOpponents(Team))
         {
-            if (!enemy.IsAlive)
+            if (enemy.IsAlive)
             {
-                continue;
+                targets.Add(enemy);
             }
-
-            DealDamage(enemy, SkillPower(skills == null ? null : skills.Ultimate, 1.15f), 0.3f);
+        }
+        var power = SkillPower(skills == null ? null : skills.Ultimate, 1.15f) * UltimateSkillMultiplier;
+        StartCoroutine(RunTimedSequence(targets.Count, 0.06f, index =>
+        {
+            var enemy = targets[index];
+            if (!enemy.IsAlive || battle.IsFinished)
+            {
+                return;
+            }
+            DealDamage(enemy, power, 0.3f);
             enemy.ApplyAttackSlow(4f);
             PrototypeEffect.Spawn(prototypeSprite, enemy.transform.position, bodyColor, 0.25f, 1.2f, 0.3f);
-        }
+        }));
     }
 
     private void CastHeliosRain()
     {
         battle.Announce("LYRA  ·  HELIOS RAIN");
+        var targets = new List<PrototypeCombatant>();
         foreach (var enemy in battle.GetOpponents(Team))
         {
             if (enemy.IsAlive)
             {
-                DealDamage(enemy, SkillPower(skills == null ? null : skills.Ultimate, 1.1f));
-                enemy.ApplyBurn(this, Mathf.RoundToInt(EffectiveAttack * 0.2f), 4f);
-                PrototypeEffect.Spawn(prototypeSprite, enemy.transform.position, bodyColor, 0.25f, 1.3f, 0.35f);
+                targets.Add(enemy);
+            }
+        }
+        var power = SkillPower(skills == null ? null : skills.Ultimate, 1.1f) * UltimateSkillMultiplier;
+        StartCoroutine(RunTimedSequence(targets.Count, 0.06f, index =>
+        {
+            var enemy = targets[index];
+            if (!enemy.IsAlive || battle.IsFinished)
+            {
+                return;
+            }
+            var wasBurning = enemy.HasBurn;
+            DealDamage(enemy, power);
+            enemy.ApplyBurn(this, Mathf.RoundToInt(EffectiveAttack * UltimateSkillMultiplier * 0.2f), 4f);
+            PrototypeEffect.SpawnLine(
+                prototypeSprite,
+                enemy.transform.position + Vector3.up * 2.2f,
+                enemy.transform.position,
+                wasBurning ? new Color(1f, 0.28f, 0.04f) : SkillAccent,
+                0.28f,
+                wasBurning ? 0.12f : 0.07f);
+        }));
+    }
+
+    internal static IEnumerator RunTimedSequence(int count, float interval, System.Action<int> step)
+    {
+        yield return null;
+        for (var index = 0; index < count; index++)
+        {
+            step(index);
+            if (index + 1 < count)
+            {
+                yield return new WaitForSeconds(interval);
             }
         }
     }
@@ -1785,6 +2291,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             if (ally.IsAlive)
             {
                 ally.GrantShield(Mathf.RoundToInt(ally.MaxHealth * 0.2f), 6f);
+                PrototypeEffect.SpawnBarrier(prototypeSprite, ally.transform.position, SkillAccent, 0.45f);
             }
         }
 
@@ -1864,33 +2371,69 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private void TriggerArcChain()
     {
-        HitSecondaryTarget(0.6f);
+        HitSecondaryTarget(0.6f, true);
     }
 
-    private void HitSecondaryTarget(float multiplier)
+    private void HitSecondaryTarget(float multiplier, bool burnAware = false)
     {
-        PrototypeCombatant chainTarget = null;
-        var closestDistance = float.MaxValue;
+        var origin = Target;
+        var chainTarget = FindChainTarget(origin, null, burnAware, false);
+        if (chainTarget == null)
+        {
+            return;
+        }
+
+        DealDamage(chainTarget, multiplier);
+        PrototypeEffect.SpawnLine(
+            prototypeSprite,
+            origin.transform.position,
+            chainTarget.transform.position,
+            SkillAccent,
+            0.2f,
+            0.06f);
+
+        var extraTarget = burnAware
+            ? FindChainTarget(chainTarget, origin, true, true)
+            : null;
+        var extraMultiplier = IonBurnBounceMultiplier(extraTarget != null);
+        if (extraTarget != null && extraMultiplier > 0f)
+        {
+            DealDamage(extraTarget, extraMultiplier);
+            PrototypeEffect.SpawnLine(
+                prototypeSprite,
+                chainTarget.transform.position,
+                extraTarget.transform.position,
+                SkillAccent,
+                0.2f,
+                0.045f);
+        }
+    }
+
+    private PrototypeCombatant FindChainTarget(
+        PrototypeCombatant origin,
+        PrototypeCombatant excluded,
+        bool preferBurn,
+        bool requireBurn)
+    {
+        PrototypeCombatant best = null;
+        var bestScore = float.MaxValue;
         foreach (var enemy in battle.GetOpponents(Team))
         {
-            if (!enemy.IsAlive || enemy == Target)
+            if (!enemy.IsAlive || enemy == origin || enemy == excluded || requireBurn && !enemy.HasBurn)
             {
                 continue;
             }
 
-            var distance = (enemy.transform.position - Target.transform.position).sqrMagnitude;
-            if (distance < closestDistance)
+            var burnPriority = preferBurn && enemy.HasBurn ? -1000f : 0f;
+            var score = burnPriority + (enemy.transform.position - origin.transform.position).sqrMagnitude;
+            if (score < bestScore)
             {
-                chainTarget = enemy;
-                closestDistance = distance;
+                best = enemy;
+                bestScore = score;
             }
         }
 
-        if (chainTarget != null)
-        {
-            DealDamage(chainTarget, multiplier);
-            PrototypeEffect.Spawn(prototypeSprite, chainTarget.transform.position, bodyColor, 0.2f, 1f, 0.25f);
-        }
+        return best;
     }
 
     private void TriggerGuidingLight()
@@ -1898,8 +2441,8 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         var ally = battle.FindLowestHealth(battle.GetTeam(Team));
         if (ally != null)
         {
-            ally.Heal(Mathf.RoundToInt(EffectiveAttack * 0.45f));
-            PrototypeEffect.Spawn(prototypeSprite, ally.transform.position, bodyColor, 0.25f, 1f, 0.3f);
+            ally.HealAndReinforce(Mathf.RoundToInt(EffectiveAttack * 0.45f));
+            PrototypeEffect.Spawn(prototypeSprite, ally.transform.position, SkillAccent, 0.25f, 1f, 0.3f);
         }
     }
 
@@ -1929,15 +2472,48 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         battle.Announce("VEX  ·  MOMENTUM");
     }
 
-    private void Heal(int amount)
+    private int Heal(int amount)
     {
         if (!IsAlive || amount <= 0)
+        {
+            return 0;
+        }
+
+        var previous = currentHealth;
+        currentHealth = Mathf.Min(MaxHealth, currentHealth + amount);
+        UpdateHealthBar();
+        var healed = currentHealth - previous;
+        if (healed > 0)
+        {
+            PrototypeDamageNumber.SpawnText(
+                transform.position + Vector3.up * 1.12f,
+                $"+{healed}",
+                new Color(0.35f, 1f, 0.5f));
+        }
+        return healed;
+    }
+
+    private void HealAndReinforce(int amount)
+    {
+        var hadShield = HasShield;
+        var healed = Heal(amount);
+        if (hadShield && healed > 0)
+        {
+            ReinforceShield(healed);
+        }
+    }
+
+    private void ReinforceShield(int healAmount)
+    {
+        var reinforcement = ShieldReinforcement(MaxHealth, currentShield, healAmount);
+        if (reinforcement <= 0)
         {
             return;
         }
 
-        currentHealth = Mathf.Min(MaxHealth, currentHealth + amount);
-        UpdateHealthBar();
+        currentShield += reinforcement;
+        shieldVisual.enabled = true;
+        PrototypeEffect.SpawnBarrier(prototypeSprite, transform.position, new Color(0.45f, 1f, 0.75f), 0.3f);
     }
 
     private void GrantShield(int amount, float duration)
@@ -1964,6 +2540,63 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         slowRemaining = Mathf.Max(slowRemaining, duration);
     }
 
+    internal void ApplyMovementSlow(float percent, float duration)
+    {
+        if (percent >= movementSlowPercent || movementSlowRemaining <= 0f)
+        {
+            movementSlowPercent = Mathf.Clamp01(percent);
+        }
+        movementSlowRemaining = Mathf.Max(movementSlowRemaining, duration);
+    }
+
+    internal void ApplyDecayingSlow(float percent, float duration)
+    {
+        decayingSlowStart = Mathf.Max(decayingSlowStart, Mathf.Clamp01(percent));
+        decayingSlowDuration = Mathf.Max(decayingSlowDuration, duration);
+        decayingSlowElapsed = 0f;
+    }
+
+    internal void ApplyKnockback(Vector3 direction, float distance)
+    {
+        direction.z = 0f;
+        if (direction.sqrMagnitude <= 0.0001f || distance <= 0f)
+        {
+            return;
+        }
+
+        knockbackStart = transform.position;
+        knockbackEnd = ClampToArena(knockbackStart + direction.normalized * distance);
+        knockbackDuration = 0.18f;
+        knockbackRemaining = knockbackDuration;
+    }
+
+    internal void ApplyKnockUp(float duration)
+    {
+        airborneDuration = Mathf.Max(0.05f, duration);
+        airborneRemaining = airborneDuration;
+        pendingAction = null;
+        actionHitRemaining = 0f;
+        attackPulse = 0f;
+        skillPulse = 0f;
+        isUltimateAction = false;
+    }
+
+    internal void ApplyGrounded(float duration)
+    {
+        groundedRemaining = Mathf.Max(groundedRemaining, duration);
+    }
+
+    private bool TryVoluntaryDisplacement(Vector3 destination)
+    {
+        if (groundedRemaining > 0f)
+        {
+            return false;
+        }
+
+        transform.position = ClampToArena(destination);
+        return true;
+    }
+
     private void ApplyHaste(float duration)
     {
         hasteRemaining = Mathf.Max(hasteRemaining, duration);
@@ -1974,12 +2607,34 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         stunRemaining = Mathf.Max(stunRemaining, duration);
     }
 
-    private void ApplyBurn(PrototypeCombatant source, int damage, float duration)
+    private void ApplyBurn(PrototypeCombatant source, int damage, float duration, float tickInterval = 1f)
     {
-        burnSource = source;
-        burnDamage = Mathf.Max(burnDamage, damage);
-        burnRemaining = Mathf.Max(burnRemaining, duration);
-        burnTickCooldown = Mathf.Min(burnTickCooldown <= 0f ? 1f : burnTickCooldown, 1f);
+        var interval = Mathf.Max(0.05f, tickInterval);
+        var candidateTotal = PrototypeFireCombat.RemainingDotDamage(damage, duration, interval);
+        var currentTotal = PrototypeFireCombat.RemainingDotDamage(
+            burnTickDamage, burnRemaining, burnTickInterval);
+        if (candidateTotal >= currentTotal)
+        {
+            burnSource = source;
+            burnDamageType = PrototypeDamageType.Fire;
+            burnTickDamage = Mathf.Max(1, damage);
+            burnTickInterval = interval;
+            burnRemaining = Mathf.Max(0f, duration);
+        }
+        burnTickCooldown = Mathf.Min(
+            burnTickCooldown <= 0f ? interval : burnTickCooldown,
+            interval);
+        burnVisual.enabled = true;
+    }
+
+    private void ApplyBurnTotal(
+        PrototypeCombatant source,
+        int totalDamage,
+        float duration,
+        float tickInterval)
+    {
+        var ticks = Mathf.Max(1, Mathf.CeilToInt(duration / Mathf.Max(0.05f, tickInterval)));
+        ApplyBurn(source, Mathf.Max(1, Mathf.CeilToInt((float)totalDamage / ticks)), duration, tickInterval);
     }
 
     private void ApplyPoison(PrototypeCombatant source, int damage, float duration)
@@ -2004,10 +2659,20 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     {
         stunRemaining = 0f;
         slowRemaining = 0f;
+        movementSlowPercent = 0f;
+        movementSlowRemaining = 0f;
+        decayingSlowStart = 0f;
+        decayingSlowDuration = 0f;
+        decayingSlowElapsed = 0f;
+        groundedRemaining = 0f;
+        airborneRemaining = 0f;
         burnRemaining = 0f;
         burnTickCooldown = 0f;
-        burnDamage = 0;
+        burnTickDamage = 0;
+        burnTickInterval = 1f;
         burnSource = null;
+        fireDotMarkerRemaining = 0f;
+        burnVisual.enabled = false;
         poisonRemaining = 0f;
         poisonTickCooldown = 0f;
         poisonDamage = 0;
@@ -2021,26 +2686,84 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         UpdateEnergyBar();
     }
 
-    private bool DealDamage(PrototypeCombatant target, float multiplier, float defenseIgnore = 0f)
+    private PrototypeDamageResult DealDamage(
+        PrototypeCombatant target,
+        float multiplier,
+        PrototypeDamageType damageType = PrototypeDamageType.Physical,
+        PrototypeDamageFlags flags = PrototypeDamageFlags.Direct,
+        float defenseIgnore = 0f)
     {
         if (target == null || !target.IsAlive)
         {
-            return false;
+            return new PrototypeDamageResult(0, false, false);
         }
 
         if (SkillKit == PrototypeSkillKit.Vex && target.CurrentHealth <= target.MaxHealth * 0.5f)
         {
             multiplier *= 1.3f;
         }
+        if (SkillKit == PrototypeSkillKit.Nova && damageType == PrototypeDamageType.Fire)
+        {
+            multiplier *= FireDamageMultiplier;
+        }
 
-        var marked = target.markedBy == this && target.markRemaining > 0f;
+        var calculated = PrototypeFireCombat.CalculateDamage(
+            EffectiveAttack,
+            target.EffectiveDefense,
+            multiplier,
+            damageType,
+            target.FireResistance,
+            defenseIgnore);
+        return ApplyCalculatedDamage(target, calculated, damageType, flags);
+    }
+
+    private PrototypeDamageResult DealDamage(
+        PrototypeCombatant target,
+        float multiplier,
+        float defenseIgnore)
+    {
+        return DealDamage(
+            target,
+            multiplier,
+            PrototypeDamageType.Physical,
+            PrototypeDamageFlags.Direct,
+            defenseIgnore);
+    }
+
+    private PrototypeDamageResult DealFlatDamage(
+        PrototypeCombatant target,
+        int amount,
+        PrototypeDamageType damageType,
+        PrototypeDamageFlags flags)
+    {
+        var scaledAmount = SkillKit == PrototypeSkillKit.Nova && damageType == PrototypeDamageType.Fire
+            ? Mathf.RoundToInt(amount * FireDamageMultiplier)
+            : amount;
+        var calculated = PrototypeFireCombat.CalculateDamage(
+            scaledAmount, 0, 1f, damageType, target.FireResistance, 0f);
+        return ApplyCalculatedDamage(target, calculated, damageType, flags);
+    }
+
+    private PrototypeDamageResult ApplyCalculatedDamage(
+        PrototypeCombatant target,
+        int calculatedDamage,
+        PrototypeDamageType damageType,
+        PrototypeDamageFlags flags)
+    {
+        if (target == null || !target.IsAlive)
+        {
+            return new PrototypeDamageResult(0, false, false);
+        }
+
+        var targetWasBurning = target.HasBurn;
         var wasAlive = target.IsAlive;
         var appliedDamage = target.TakeDamage(
-            CalculateDamage(EffectiveAttack, target.EffectiveDefense, multiplier, marked, defenseIgnore));
+            calculatedDamage,
+            (flags & PrototypeDamageFlags.Direct) != 0);
         DamageDealt += appliedDamage;
         if (appliedDamage > 0)
         {
-            var strongImpact = skillPulse > 0f;
+            var strongImpact = skillPulse > 0f && (flags & PrototypeDamageFlags.DamageOverTime) == 0;
             PrototypeEffect.Spawn(
                 prototypeSprite,
                 target.transform.position,
@@ -2049,14 +2772,25 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 strongImpact ? 1.3f : 0.7f,
                 strongImpact ? 0.28f : 0.16f);
             PrototypeBattleFeedback.PlayImpact(strongImpact);
+            if (isUltimateAction && PrototypeGameFlow.HasInstance)
+            {
+                PrototypeGameFlow.Instance.ShowImpact(SkillAccent);
+            }
         }
         var killed = wasAlive && !target.IsAlive;
         if (killed && SkillKit == PrototypeSkillKit.Vex)
         {
             TriggerMomentum();
         }
+        if (appliedDamage > 0 && SkillKit == PrototypeSkillKit.Nova &&
+            ((damageType == PrototypeDamageType.Fire && targetWasBurning) ||
+             (flags & PrototypeDamageFlags.AshDetonation) != 0))
+        {
+            AddHeat(1);
+            GainEnergy(2f);
+        }
 
-        return killed;
+        return new PrototypeDamageResult(appliedDamage, killed, targetWasBurning);
     }
 
     private void DealStatusDamage(PrototypeCombatant target, int damage)
@@ -2064,16 +2798,71 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         DamageDealt += target.TakeDamage(damage, false);
     }
 
-    internal static int CalculateDamage(
-        int attack,
-        int defense,
-        float multiplier,
-        bool marked,
-        float defenseIgnore = 0f)
+    internal static float CombatStoppingDistance(float attackRange, float attackerBodySize, float targetBodySize)
     {
-        var rawDamage = Mathf.RoundToInt(attack * multiplier * (marked ? 1.25f : 1f));
-        var effectiveDefense = Mathf.RoundToInt(defense * (1f - Mathf.Clamp01(defenseIgnore)));
-        return Mathf.Max(1, rawDamage - effectiveDefense);
+        return Mathf.Max(attackRange, (attackerBodySize + targetBodySize) * 0.58f);
+    }
+
+    internal static Vector3 MoveTowardAttackRange(
+        Vector3 current,
+        Vector3 target,
+        float moveDistance,
+        float stoppingDistance)
+    {
+        var delta = target - current;
+        delta.z = 0f;
+        var distance = delta.magnitude;
+        if (distance <= stoppingDistance || distance <= 0.0001f || moveDistance <= 0f)
+        {
+            return current;
+        }
+
+        return current + delta / distance * Mathf.Min(moveDistance, distance - stoppingDistance);
+    }
+
+    internal static Vector3 CalculateEngagementPoint(
+        Vector3 current,
+        Vector3 target,
+        float stoppingDistance,
+        float lateralOffset)
+    {
+        var radial = current - target;
+        radial.z = 0f;
+        radial = radial.sqrMagnitude > 0.0001f ? radial.normalized : Vector3.left;
+        var lateral = Mathf.Clamp(
+            lateralOffset,
+            -stoppingDistance * 0.68f,
+            stoppingDistance * 0.68f);
+        var radialDistance = Mathf.Sqrt(Mathf.Max(0f, stoppingDistance * stoppingDistance - lateral * lateral));
+        var tangent = new Vector3(-radial.y, radial.x);
+        return target + radial * radialDistance + tangent * lateral;
+    }
+
+    internal static Vector3 ClampToArena(Vector3 position)
+    {
+        return new Vector3(
+            Mathf.Clamp(position.x, -ArenaHalfExtent, ArenaHalfExtent),
+            Mathf.Clamp(position.y, -ArenaHalfExtent, ArenaHalfExtent),
+            position.z);
+    }
+
+    internal static float IonBurnBounceMultiplier(bool hasBurningTarget)
+    {
+        return hasBurningTarget ? 0.3f : 0f;
+    }
+
+    internal static int ShieldReinforcement(int maxHealth, int currentShield, int healAmount)
+    {
+        var cap = Mathf.RoundToInt(maxHealth * 0.3f);
+        return Mathf.Clamp(
+            Mathf.RoundToInt(healAmount * 0.35f),
+            0,
+            Mathf.Max(0, cap - currentShield));
+    }
+
+    internal static bool ShouldFlipSprite(bool facesLeft, bool sourceFacesLeft)
+    {
+        return facesLeft != sourceFacesLeft;
     }
 
     private int TakeDamage(int damage, bool triggersOnHit = true)
@@ -2116,15 +2905,13 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
         if (triggersOnHit && SkillKit != PrototypeSkillKit.None && IsAlive)
         {
-            GainEnergy(SkillKit == PrototypeSkillKit.Nova && IsLastLightActive ? 9f : 6f);
+            GainEnergy(6f);
         }
 
-        if (SkillKit == PrototypeSkillKit.Nova && IsAlive)
+        if (SkillKit == PrototypeSkillKit.Nova && IsAlive && flameShieldCooldown <= 0f &&
+            previousHealth > MaxHealth * 0.25f && currentHealth <= MaxHealth * 0.25f)
         {
-            if (!reactorTriggered && currentHealth <= MaxHealth * 0.5f)
-            {
-                ActivateAegisReactor();
-            }
+            ActivateFlameShield();
         }
 
         if (SkillKit == PrototypeSkillKit.Krag && IsAlive &&
@@ -2148,8 +2935,18 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         if (!IsAlive)
         {
             Target = null;
+            guardLinkTarget = null;
+            guardLinkRemaining = 0f;
             DisableShield();
+            PrototypeFireZone.DestroyOwnedBy(this);
             markVisual.enabled = false;
+            burnVisual.enabled = false;
+            if (heatAura != null) heatAura.enabled = false;
+            if (heatVfx != null)
+            {
+                Destroy(heatVfx.gameObject);
+                heatVfx = null;
+            }
             body.color = Color.white;
         }
 
@@ -2189,22 +2986,187 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private float ActiveSkillMultiplier => 1f + (activeSkillLevel - 1) * 0.08f;
     private float UltimateSkillMultiplier => 1f + (ultimateSkillLevel - 1) * 0.1f;
 
-    private void ApplyPhotonMark(PrototypeCombatant source)
+    internal void ApplyAsh(PrototypeCombatant source, int amount)
     {
-        markedBy = source;
-        markRemaining = 6f;
-        markVisual.enabled = true;
-        PrototypeEffect.Spawn(prototypeSprite, transform.position, new Color(1f, 0.82f, 0.2f), 0.25f, 1.1f, 0.3f);
+        if (source == null || amount <= 0 || !IsAlive)
+        {
+            return;
+        }
+
+        ashBySource.TryGetValue(source, out var state);
+        state.stacks = Mathf.Clamp(state.stacks + amount, 0, 3);
+        state.remaining = 5f;
+        ashBySource[source] = state;
+        markVisual.enabled = TotalAshStacks > 0;
+        var sheet = TotalAshStacks >= 3
+            ? "FireGodAshSigil"
+            : TotalAshStacks == 2 ? "FireGodAshTwo" : "FireGodAshOne";
+        PrototypeFireVfx.Spawn(sheet, transform.position, 0.1f, 0.72f, false, 109);
     }
 
-    private void ActivateAegisReactor()
+    internal int AshStacksFrom(PrototypeCombatant source)
     {
-        reactorTriggered = true;
-        currentShield = Mathf.RoundToInt(MaxHealth * 0.3f);
-        shieldRemaining = 6f;
-        shieldVisual.enabled = true;
-        battle.Announce("NOVA  ·  AEGIS REACTOR");
-        PrototypeEffect.Spawn(prototypeSprite, transform.position, bodyColor, 1.1f, 1.8f, 0.45f);
+        return source != null && ashBySource.TryGetValue(source, out var state) ? state.stacks : 0;
+    }
+
+    internal int ConsumeAsh(PrototypeCombatant source)
+    {
+        var stacks = AshStacksFrom(source);
+        if (stacks > 0)
+        {
+            ashBySource.Remove(source);
+        }
+        markVisual.enabled = TotalAshStacks > 0;
+        return stacks;
+    }
+
+    private int TotalAshStacks
+    {
+        get
+        {
+            var total = 0;
+            foreach (var state in ashBySource.Values)
+            {
+                total += state.stacks;
+            }
+            return total;
+        }
+    }
+
+    internal void AddHeat(int amount)
+    {
+        heatStacks = Mathf.Clamp(heatStacks + Mathf.Max(0, amount), 0, 5);
+        if (heatAura != null)
+        {
+            heatAura.enabled = heatStacks > 0;
+        }
+        if (heatStacks > 0 && heatVfx == null)
+        {
+            heatVfx = PrototypeFireVfx.SpawnAttached(
+                "FireGodHeatAura", transform, 0.1f, 1.6f, true, 58);
+        }
+    }
+
+    private void ActivateFlameShield()
+    {
+        GrantShield(PrototypeFireCombat.FlameShieldAmount(MaxHealth, heatStacks), 6f);
+        flameShieldCooldown = 90f;
+        battle.Announce("FIRE GOD - FLAME SHIELD");
+        PrototypeFireVfx.Spawn("FireGodFlameShieldSpawn", transform.position, 0.06f, 1.65f, false, 114);
+        if (flameShieldVfx != null)
+        {
+            Destroy(flameShieldVfx.gameObject);
+        }
+        flameShieldVfx = PrototypeFireVfx.SpawnAttached(
+            "FireGodFlameShieldLoop", transform, 0.1f, 1.65f, true, 113);
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            var delta = enemy.transform.position - transform.position;
+            if (enemy.IsAlive && delta.sqrMagnitude <= 1.75f * 1.75f)
+            {
+                enemy.ApplyKnockback(delta.normalized, 1.2f);
+            }
+        }
+    }
+
+    internal void ApplyMagmaTick(
+        PrototypeCombatant target,
+        PrototypeFireZone zone,
+        float multiplier)
+    {
+        var result = DealDamage(
+            target,
+            multiplier,
+            PrototypeDamageType.Fire,
+            PrototypeDamageFlags.DamageOverTime);
+        target.fireDotMarkerRemaining = Mathf.Max(target.fireDotMarkerRemaining, 0.6f);
+        if (result.Killed)
+        {
+            OnFireDotKill(
+                target,
+                result.AppliedDamage * zone.RemainingTickCount,
+                zone.RemainingDuration,
+                0.5f);
+            return;
+        }
+
+        target.ApplyMovementSlow(0.3f, 0.6f);
+        if (target.AshStacksFrom(this) >= 3)
+        {
+            target.ConsumeAsh(this);
+            PrototypeFireVfx.Spawn(
+                "FireGodMagmaBurst", target.transform.position, 0.065f, 1.1f, false, 112);
+            DealDamage(
+                target,
+                0.75f,
+                PrototypeDamageType.True,
+                PrototypeDamageFlags.AshDetonation);
+            if (target.IsAlive)
+            {
+                target.ApplyDecayingSlow(0.7f, 2f);
+            }
+        }
+    }
+
+    internal void ApplyScorchTick(
+        PrototypeCombatant target,
+        PrototypeFireZone zone,
+        float multiplier)
+    {
+        var result = DealDamage(
+            target,
+            multiplier,
+            PrototypeDamageType.Fire,
+            PrototypeDamageFlags.DamageOverTime);
+        target.fireDotMarkerRemaining = Mathf.Max(target.fireDotMarkerRemaining, 0.6f);
+        if (result.Killed)
+        {
+            OnFireDotKill(
+                target,
+                result.AppliedDamage * zone.RemainingTickCount,
+                zone.RemainingDuration,
+                0.5f);
+            return;
+        }
+        target.ApplyGrounded(0.6f);
+    }
+
+    internal void OnFireDotKill(
+        PrototypeCombatant deadTarget,
+        int remainingDamage,
+        float remainingDuration,
+        float tickInterval)
+    {
+        if (SkillKit != PrototypeSkillKit.Nova || deadTarget == null || remainingDamage <= 0)
+        {
+            return;
+        }
+
+        var origin = deadTarget.transform.position;
+        PrototypeFireVfx.Spawn("FireGodAshDissolve", origin, 0.08f, 1.1f, false, 112);
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            if (!enemy.IsAlive || !PrototypeFireCombat.PointInCircle(enemy.transform.position, origin, 4f))
+            {
+                continue;
+            }
+
+            enemy.ApplyAsh(this, 2);
+            enemy.ApplyBurnTotal(
+                this,
+                Mathf.RoundToInt(remainingDamage * 0.5f),
+                remainingDuration,
+                tickInterval);
+            PrototypeFireVfx.SpawnTravel(
+                "FireGodEmberProjectile", origin, enemy.transform.position, 0.24f, 0.7f, 113, 0.55f);
+            StartCoroutine(DelayedEmberIgnite(enemy.transform.position, 0.24f));
+        }
+    }
+
+    private IEnumerator DelayedEmberIgnite(Vector3 position, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        PrototypeFireVfx.Spawn("FireGodEmberIgnite", position, 0.07f, 0.9f, false, 112);
     }
 
     private void GainEnergy(float amount)
@@ -2216,13 +3178,66 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private void UpdateStatuses()
     {
         activeSkillCooldown = Mathf.Max(0f, activeSkillCooldown - Time.deltaTime);
+        flameShieldCooldown = Mathf.Max(0f, flameShieldCooldown - Time.deltaTime);
         hasteRemaining = Mathf.Max(0f, hasteRemaining - Time.deltaTime);
         slowRemaining = Mathf.Max(0f, slowRemaining - Time.deltaTime);
         stunRemaining = Mathf.Max(0f, stunRemaining - Time.deltaTime);
+        movementSlowRemaining = Mathf.Max(0f, movementSlowRemaining - Time.deltaTime);
+        if (movementSlowRemaining <= 0f) movementSlowPercent = 0f;
+        if (decayingSlowDuration > 0f)
+        {
+            decayingSlowElapsed = Mathf.Min(decayingSlowDuration, decayingSlowElapsed + Time.deltaTime);
+            if (decayingSlowElapsed >= decayingSlowDuration)
+            {
+                decayingSlowStart = 0f;
+                decayingSlowDuration = 0f;
+                decayingSlowElapsed = 0f;
+            }
+        }
+        groundedRemaining = Mathf.Max(0f, groundedRemaining - Time.deltaTime);
+        fireDotMarkerRemaining = Mathf.Max(0f, fireDotMarkerRemaining - Time.deltaTime);
+        UpdateDisplacement();
         attackBuffRemaining = Mathf.Max(0f, attackBuffRemaining - Time.deltaTime);
         attackDebuffRemaining = Mathf.Max(0f, attackDebuffRemaining - Time.deltaTime);
-        TickDamageOverTime(ref burnRemaining, ref burnTickCooldown, burnDamage, burnSource);
+        TickBurn();
         TickDamageOverTime(ref poisonRemaining, ref poisonTickCooldown, poisonDamage, poisonSource);
+        if (burnRemaining <= 0f)
+        {
+            burnVisual.enabled = false;
+            burnTickDamage = 0;
+            burnSource = null;
+        }
+
+        ashSources.Clear();
+        ashSources.AddRange(ashBySource.Keys);
+        foreach (var source in ashSources)
+        {
+            var state = ashBySource[source];
+            state.remaining -= Time.deltaTime;
+            if (source == null || !source.IsAlive || state.remaining <= 0f)
+            {
+                ashBySource.Remove(source);
+            }
+            else
+            {
+                ashBySource[source] = state;
+            }
+        }
+        markVisual.enabled = IsAlive && TotalAshStacks > 0;
+        if (heatAura != null)
+        {
+            heatAura.enabled = IsAlive && heatStacks > 0;
+            heatAura.color = new Color(1f, 0.18f, 0.02f, 0.08f + heatStacks * 0.035f);
+        }
+
+        if (guardLinkRemaining > 0f)
+        {
+            guardLinkRemaining = Mathf.Max(0f, guardLinkRemaining - Time.deltaTime);
+            if (guardLinkRemaining <= 0f || guardLinkTarget == null || !guardLinkTarget.IsAlive)
+            {
+                guardLinkTarget = null;
+            }
+        }
 
         if (tauntRemaining > 0f)
         {
@@ -2247,14 +3262,60 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             }
         }
 
-        if (markRemaining > 0f)
+    }
+
+    private float CurrentMovementSlow => Mathf.Max(
+        movementSlowRemaining > 0f ? movementSlowPercent : 0f,
+        decayingSlowDuration > 0f
+            ? PrototypeFireCombat.DecayingSlow(decayingSlowStart, decayingSlowDuration, decayingSlowElapsed)
+            : 0f);
+
+    private void UpdateDisplacement()
+    {
+        if (knockbackRemaining > 0f)
         {
-            markRemaining -= Time.deltaTime;
-            if (markRemaining <= 0f)
-            {
-                markedBy = null;
-                markVisual.enabled = false;
-            }
+            knockbackRemaining = Mathf.Max(0f, knockbackRemaining - Time.deltaTime);
+            var progress = 1f - knockbackRemaining / Mathf.Max(0.01f, knockbackDuration);
+            transform.position = Vector3.Lerp(knockbackStart, knockbackEnd, progress);
+        }
+        if (airborneRemaining > 0f)
+        {
+            airborneRemaining = Mathf.Max(0f, airborneRemaining - Time.deltaTime);
+        }
+    }
+
+    private void TickBurn()
+    {
+        if (burnRemaining <= 0f || burnTickDamage <= 0 || !IsAlive)
+        {
+            return;
+        }
+
+        burnRemaining = Mathf.Max(0f, burnRemaining - Time.deltaTime);
+        burnTickCooldown -= Time.deltaTime;
+        if (burnTickCooldown > 0f)
+        {
+            return;
+        }
+
+        var source = burnSource;
+        var result = source != null
+            ? source.DealFlatDamage(
+                this,
+                burnTickDamage,
+                burnDamageType,
+                PrototypeDamageFlags.DamageOverTime)
+            : new PrototypeDamageResult(TakeDamage(burnTickDamage, false), !IsAlive, true);
+        burnTickCooldown += burnTickInterval;
+        if (result.Killed && source != null)
+        {
+            source.OnFireDotKill(
+                this,
+                PrototypeFireCombat.RemainingDotDamage(
+                    burnTickDamage, burnRemaining, burnTickInterval),
+                burnRemaining,
+                burnTickInterval);
+            burnRemaining = 0f;
         }
     }
 
@@ -2294,11 +3355,32 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         {
             shieldVisual.enabled = false;
         }
+        if (flameShieldVfx != null)
+        {
+            Destroy(flameShieldVfx.gameObject);
+            flameShieldVfx = null;
+            if (IsAlive)
+            {
+                PrototypeFireVfx.Spawn(
+                    "FireGodFlameShieldBreak", transform.position, 0.06f, 1.65f, false, 114);
+            }
+        }
     }
 
     private void UpdateFeedback()
     {
+        UpdateSortingOrder();
+        afterimageCooldown = Mathf.Max(0f, afterimageCooldown - Time.deltaTime);
+        if (IsAlive && afterimageCooldown <= 0f && (isMoving || attackPulse > 0f || skillPulse > 0f))
+        {
+            PrototypeAfterimage.Spawn(body, sortingGroup.sortingOrder - 1, SkillAccent);
+            afterimageCooldown = isMoving ? 0.12f : 0.08f;
+        }
         skillPulse = Mathf.Max(0f, skillPulse - Time.deltaTime);
+        if (skillPulse <= 0f)
+        {
+            isUltimateAction = false;
+        }
         if (attackPulse > 0f)
         {
             attackPulse = Mathf.Max(0f, attackPulse - Time.deltaTime);
@@ -2314,18 +3396,109 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         if (IsAlive)
         {
             hitFlash -= Time.deltaTime;
-            body.color = hitFlash > 0f ? new Color(1f, 0.55f, 0.55f) : Color.white;
+            body.color = hitFlash > 0f
+                ? new Color(1f, 0.55f, 0.55f)
+                : Color.white;
         }
 
+        UpdateBossPhaseVisuals();
+        UpdateUltimateReadyVisual();
+        UpdateAshVisual();
+        UpdateStatusIcons();
         UpdateCharacterAnimation();
+        UpdateAirborneVisual();
+    }
+
+    private void UpdateAirborneVisual()
+    {
+        if (body == null)
+        {
+            return;
+        }
+
+        if (airborneRemaining > 0f)
+        {
+            var progress = 1f - airborneRemaining / Mathf.Max(0.01f, airborneDuration);
+            var position = definition != null && definition.HasStaticImportedSprite
+                ? body.transform.localPosition
+                : Vector3.zero;
+            position.y += Mathf.Sin(progress * Mathf.PI) * 0.58f;
+            body.transform.localPosition = position;
+        }
+        else if (definition != null && !definition.HasStaticImportedSprite)
+        {
+            body.transform.localPosition = Vector3.zero;
+        }
+    }
+
+    private void UpdateAshVisual()
+    {
+        if (markVisual == null || !markVisual.enabled)
+        {
+            return;
+        }
+
+        var stacks = TotalAshStacks;
+        if (stacks >= 3)
+        {
+            markVisual.transform.localPosition = new Vector3(0f, -bodySize * 0.36f);
+            markVisual.transform.localScale = new Vector3(0.42f, 0.42f, 1f);
+            markVisual.color = new Color(1f, 0.18f, 0.02f, 0.9f);
+        }
+        else
+        {
+            var angle = Time.time * 4.5f;
+            markVisual.transform.localPosition = new Vector3(
+                Mathf.Cos(angle) * 0.48f,
+                0.55f + Mathf.Sin(angle) * 0.22f);
+            markVisual.transform.localScale = new Vector3(0.16f, 0.16f, 1f);
+            markVisual.color = new Color(1f, 0.42f, 0.06f, 0.85f);
+        }
+        markVisual.transform.Rotate(0f, 0f, 150f * Time.deltaTime);
+    }
+
+    private void UpdateSortingOrder()
+    {
+        if (sortingGroup != null)
+        {
+            sortingGroup.sortingOrder = 60 - Mathf.RoundToInt(transform.position.y * 4f);
+        }
+    }
+
+    private void UpdateUltimateReadyVisual()
+    {
+        if (ultimateReadyVisual == null)
+        {
+            return;
+        }
+
+        if (!IsAlive)
+        {
+            ultimateReadyVisual.enabled = false;
+            return;
+        }
+
+        if (!ultimateReadyVisual.enabled)
+        {
+            return;
+        }
+
+        var pulse = 1f + Mathf.Sin(Time.time * 12f) * 0.22f;
+        ultimateReadyVisual.transform.localScale = new Vector3(0.2f * pulse, 0.2f * pulse, 1f);
+        ultimateReadyVisual.transform.Rotate(0f, 0f, 120f * Time.deltaTime);
     }
 
     private void UpdateCharacterAnimation()
     {
+        if (deathVisualsHidden)
+        {
+            return;
+        }
+
         if (characterSprites == null && Species != PrototypeSpecies.Unknown)
         {
             characterSprites = definition != null
-                ? PrototypePixelArt.Create(definition)
+                ? PrototypePixelArt.Create(definition, IsBoss)
                 : PrototypePixelArt.Create(Species, CombatClass, SkillKit, bodyColor);
         }
 
@@ -2336,7 +3509,9 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
         var nextState = !IsAlive
             ? PrototypeAnimationState.Death
-            : skillPulse > 0f
+            : isUltimateAction && skillPulse > 0f
+                ? PrototypeAnimationState.Ultimate
+                : skillPulse > 0f
                 ? PrototypeAnimationState.Skill
                 : attackPulse > 0f
                     ? PrototypeAnimationState.Attack
@@ -2362,17 +3537,81 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             return;
         }
 
-        var frameDuration = animationState == PrototypeAnimationState.Idle
-            ? 0.45f
-            : animationState == PrototypeAnimationState.Run
-                ? 0.1f
-                : animationState == PrototypeAnimationState.Hit ? 0.06f : 0.09f;
+        var frameDuration = SkillKit == PrototypeSkillKit.Nova
+            ? animationState == PrototypeAnimationState.Attack
+                ? SkillDuration(skills == null ? null : skills.Basic, 0.56f) / frames.Length
+                : animationState == PrototypeAnimationState.Skill
+                    ? SkillDuration(skills == null ? null : skills.Active, 1.3f) / frames.Length
+                    : animationState == PrototypeAnimationState.Ultimate
+                        ? SkillDuration(skills == null ? null : skills.Ultimate, 1.3f) / frames.Length
+                        : 0.1f
+            : animationState == PrototypeAnimationState.Idle
+                ? 0.45f
+                : animationState == PrototypeAnimationState.Run
+                    ? 0.1f
+                    : animationState == PrototypeAnimationState.Hit
+                        ? 0.06f
+                        : animationState == PrototypeAnimationState.Ultimate ? 0.065f : 0.07f;
+        if (animationState == PrototypeAnimationState.Death &&
+            animationTime >= frames.Length * frameDuration)
+        {
+            deathVisualsHidden = true;
+            SetCombatVisualsVisible(false);
+            return;
+        }
         var rawFrame = Mathf.FloorToInt(animationTime / frameDuration);
         var loops = animationState == PrototypeAnimationState.Idle || animationState == PrototypeAnimationState.Run;
         var frameIndex = loops ? rawFrame % frames.Length : Mathf.Min(rawFrame, frames.Length - 1);
         if (frames[frameIndex] != null)
         {
             body.sprite = frames[frameIndex];
+        }
+
+        if (definition != null && definition.HasStaticImportedSprite)
+        {
+            UpdateStaticSpritePose();
+        }
+    }
+
+    private void UpdateStaticSpritePose()
+    {
+        var position = Vector3.zero;
+        var angle = 0f;
+        var towardEnemy = Team == PrototypeTeam.Allies ? 1f : -1f;
+        switch (animationState)
+        {
+            case PrototypeAnimationState.Idle:
+                position.y = Mathf.Sin(animationTime * 4f) * 0.035f;
+                break;
+            case PrototypeAnimationState.Run:
+                position.y = Mathf.Abs(Mathf.Sin(animationTime * 15f)) * 0.07f;
+                angle = Mathf.Sin(animationTime * 15f) * 2.5f;
+                break;
+            case PrototypeAnimationState.Attack:
+                position.x = towardEnemy * Mathf.Sin(Mathf.Clamp01(animationTime / BasicActionDuration) * Mathf.PI) * 0.12f;
+                break;
+            case PrototypeAnimationState.Skill:
+            case PrototypeAnimationState.Ultimate:
+                position.y = Mathf.Sin(Mathf.Clamp01(animationTime / SkillActionDuration) * Mathf.PI) * 0.09f;
+                break;
+            case PrototypeAnimationState.Hit:
+                position.x = Mathf.Sin(animationTime * 55f) * 0.05f;
+                break;
+            case PrototypeAnimationState.Death:
+                angle = towardEnemy * Mathf.Lerp(0f, 82f, Mathf.Clamp01(animationTime / 0.35f));
+                position.y = -Mathf.Lerp(0f, 0.14f, Mathf.Clamp01(animationTime / 0.35f));
+                break;
+        }
+
+        body.transform.localPosition = position;
+        body.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+    }
+
+    private void SetCombatVisualsVisible(bool visible)
+    {
+        foreach (var renderer in GetComponentsInChildren<SpriteRenderer>(true))
+        {
+            renderer.enabled = visible;
         }
     }
 
@@ -2387,6 +3626,8 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 case PrototypeSkillKit.Krag: return new Color(0.68f, 0.4f, 1f);
                 case PrototypeSkillKit.Vex: return new Color(1f, 0.2f, 0.55f);
                 case PrototypeSkillKit.Astra: return new Color(0.35f, 1f, 0.65f);
+                case PrototypeSkillKit.Lyra: return new Color(1f, 0.9f, 0.2f);
+                case PrototypeSkillKit.Brakk: return new Color(0.3f, 0.85f, 1f);
                 case PrototypeSkillKit.Hex: return new Color(0.45f, 1f, 0.2f);
                 case PrototypeSkillKit.Mira: return new Color(0.15f, 0.85f, 0.9f);
                 case PrototypeSkillKit.Drake: return new Color(1f, 0.32f, 0.12f);
@@ -2410,13 +3651,14 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private void CreateHealthBar(Sprite sprite)
     {
+        var healthBarY = bodySize * 0.5f + 0.12f;
         var background = CreateSprite(
             "Health Background",
             sprite,
             new Color(0.02f, 0.025f, 0.04f),
             new Vector3(HealthBarWidth + 0.1f, 0.17f, 1f),
             4);
-        background.transform.localPosition = new Vector3(0f, 0.78f);
+        background.transform.localPosition = new Vector3(0f, healthBarY);
 
         healthFill = CreateSprite(
             "Health Fill",
@@ -2424,11 +3666,86 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             bodyColor,
             new Vector3(HealthBarWidth, 0.09f, 1f),
             5);
-        healthFill.transform.localPosition = new Vector3(0f, 0.78f);
+        healthFill.transform.localPosition = new Vector3(0f, healthBarY);
+    }
+
+    private void CreateBossVisuals()
+    {
+        var accent = SkillAccent;
+        var aura = CreateSprite(
+            "Boss Aura",
+            characterSprites.Idle[0],
+            new Color(accent.r, accent.g, accent.b, 0.22f),
+            new Vector3(bodySize * 1.65f, bodySize * 1.65f),
+            0);
+        aura.flipX = body.flipX;
+
+        var crown = CreateSprite(
+            "Boss Crown",
+            prototypeSprite,
+            accent,
+            new Vector3(0.72f, 0.12f, 1f),
+            7);
+        crown.transform.localPosition = new Vector3(0f, 1.08f);
+        crown.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+
+        bossPhaseAura = CreateSprite(
+            "Boss Phase Aura",
+            characterSprites.Idle[0],
+            new Color(1f, 0.18f, 0.08f, 0.28f),
+            new Vector3(bodySize * 1.95f, bodySize * 1.95f),
+            -1);
+        bossPhaseAura.flipX = body.flipX;
+        bossPhaseAura.enabled = false;
+
+        bossOrbit = CreateSprite(
+            "Boss Orbit",
+            prototypeSprite,
+            new Color(accent.r, accent.g, accent.b, 0.65f),
+            new Vector3(1.9f, 0.08f, 1f),
+            6);
+        bossOrbit.transform.localRotation = Quaternion.Euler(0f, 0f, 25f);
+    }
+
+    private void UpdateBossPhaseVisuals()
+    {
+        if (!IsBoss || bossPhaseAura == null || bossOrbit == null)
+        {
+            return;
+        }
+
+        var secondPhase = IsAlive && currentHealth <= MaxHealth * 0.5f;
+        if (secondPhase && !bossPhaseTriggered)
+        {
+            bossPhaseTriggered = true;
+            battle.Announce("KRAG - GRAVITY CORE AWAKENED");
+            PrototypeBattleFeedback.PlayImpact(true);
+        }
+
+        bossPhaseAura.enabled = secondPhase;
+        var pulse = 1f + Mathf.Sin(Time.time * (secondPhase ? 8f : 3f)) * 0.06f;
+        bossPhaseAura.transform.localScale = new Vector3(
+            bodySize * 1.95f * pulse,
+            bodySize * 1.95f * pulse,
+            1f);
+        bossOrbit.transform.Rotate(0f, 0f, (secondPhase ? 150f : 55f) * Time.deltaTime);
+        bossOrbit.color = secondPhase
+            ? new Color(1f, 0.24f, 0.12f, 0.85f)
+            : new Color(SkillAccent.r, SkillAccent.g, SkillAccent.b, 0.65f);
     }
 
     private void CreateSkillVisuals(Sprite sprite)
     {
+        var healthBarY = bodySize * 0.5f + 0.12f;
+        var energyBarY = healthBarY - 0.16f;
+        heatAura = CreateSprite(
+            "Heat Aura",
+            characterSprites.Idle[0],
+            new Color(1f, 0.18f, 0.02f, 0.12f),
+            new Vector3(bodySize * 1.18f, bodySize * 1.18f),
+            0);
+        heatAura.flipX = body.flipX;
+        heatAura.enabled = false;
         shieldVisual = CreateSprite(
             "Aegis Shield",
             sprite,
@@ -2438,7 +3755,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         shieldVisual.enabled = false;
 
         markVisual = CreateSprite(
-            "Photon Mark",
+            "Ash Sigil",
             sprite,
             new Color(1f, 0.82f, 0.2f),
             new Vector3(0.18f, 0.18f),
@@ -2447,13 +3764,33 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         markVisual.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
         markVisual.enabled = false;
 
+        burnVisual = CreateSprite(
+            "Burn Status",
+            sprite,
+            new Color(1f, 0.28f, 0.05f, 0.82f),
+            new Vector3(0.16f, 0.24f, 1f),
+            6);
+        burnVisual.transform.localPosition = new Vector3(0.42f, 0.92f);
+        burnVisual.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+        burnVisual.enabled = false;
+
+        ultimateReadyVisual = CreateSprite(
+            "Ultimate Ready",
+            sprite,
+            new Color(SkillAccent.r, SkillAccent.g, SkillAccent.b, 0.9f),
+            new Vector3(0.2f, 0.2f, 1f),
+            7);
+        ultimateReadyVisual.transform.localPosition = new Vector3(-0.46f, bodySize * 0.5f + 0.36f);
+        ultimateReadyVisual.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+        ultimateReadyVisual.enabled = false;
+
         var background = CreateSprite(
             "Energy Background",
             sprite,
             new Color(0.02f, 0.025f, 0.04f),
             new Vector3(HealthBarWidth + 0.1f, 0.12f, 1f),
             4);
-        background.transform.localPosition = new Vector3(0f, 0.61f);
+        background.transform.localPosition = new Vector3(0f, energyBarY);
 
         energyFill = CreateSprite(
             "Energy Fill",
@@ -2461,14 +3798,116 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             bodyColor,
             new Vector3(0f, 0.06f, 1f),
             5);
-        energyFill.transform.localPosition = new Vector3(-HealthBarWidth * 0.5f, 0.61f);
+        energyFill.transform.localPosition = new Vector3(-HealthBarWidth * 0.5f, energyBarY);
+    }
+
+    private void CreateStatusIcons()
+    {
+        var root = new GameObject("Status Icons");
+        root.transform.SetParent(transform, false);
+        root.transform.localPosition = new Vector3(0f, bodySize * 0.5f + 0.46f);
+        var sprites = PrototypeStatusIconArt.Get();
+        statusIcons = new SpriteRenderer[sprites.Length];
+        statusCounts = new TextMesh[sprites.Length];
+        for (var index = 0; index < sprites.Length; index++)
+        {
+            var icon = new GameObject(sprites[index].name.Replace(" Status", string.Empty));
+            icon.transform.SetParent(root.transform, false);
+            var renderer = icon.AddComponent<SpriteRenderer>();
+            renderer.sprite = sprites[index];
+            renderer.sortingOrder = 9;
+            renderer.enabled = false;
+            statusIcons[index] = renderer;
+            var count = new GameObject("Count").AddComponent<TextMesh>();
+            count.transform.SetParent(icon.transform, false);
+            count.transform.localPosition = new Vector3(0.15f, -0.12f, -0.1f);
+            count.characterSize = 0.08f;
+            count.fontSize = 42;
+            count.anchor = TextAnchor.MiddleCenter;
+            count.alignment = TextAlignment.Center;
+            count.color = Color.white;
+            count.GetComponent<MeshRenderer>().sortingOrder = 10;
+            count.gameObject.SetActive(false);
+            statusCounts[index] = count;
+        }
+    }
+
+    private void UpdateStatusIcons()
+    {
+        if (statusIcons == null)
+        {
+            return;
+        }
+
+        var visibleCount = Mathf.Min(5,
+            (stunRemaining > 0f || airborneRemaining > 0f ? 1 : 0) +
+            (TotalAshStacks > 0 ? 1 : 0) +
+            (HasBurn ? 1 : 0) +
+            (groundedRemaining > 0f ? 1 : 0) +
+            (heatStacks > 0 ? 1 : 0) +
+            (poisonRemaining > 0f ? 1 : 0) +
+            (slowRemaining > 0f || CurrentMovementSlow > 0f ? 1 : 0) +
+            (attackDebuffRemaining > 0f ? 1 : 0) +
+            (tauntRemaining > 0f ? 1 : 0) +
+            (currentShield > 0 ? 1 : 0) +
+            (hasteRemaining > 0f ? 1 : 0) +
+            (attackBuffRemaining > 0f ? 1 : 0));
+        var slot = 0;
+        SetStatusIcon(1, stunRemaining > 0f || airborneRemaining > 0f,
+            Mathf.Max(stunRemaining, airborneRemaining), visibleCount, ref slot);
+        SetStatusIcon(9, TotalAshStacks > 0, 5f, visibleCount, ref slot);
+        SetStackCount(9, TotalAshStacks);
+        SetStatusIcon(2, HasBurn, Mathf.Max(burnRemaining, fireDotMarkerRemaining), visibleCount, ref slot);
+        SetStatusIcon(11, groundedRemaining > 0f, groundedRemaining, visibleCount, ref slot);
+        SetStatusIcon(10, heatStacks > 0, 99f, visibleCount, ref slot);
+        SetStackCount(10, heatStacks);
+        SetStatusIcon(3, poisonRemaining > 0f, poisonRemaining, visibleCount, ref slot);
+        SetStatusIcon(4, slowRemaining > 0f || CurrentMovementSlow > 0f,
+            Mathf.Max(slowRemaining, movementSlowRemaining), visibleCount, ref slot);
+        SetStatusIcon(7, attackDebuffRemaining > 0f, attackDebuffRemaining, visibleCount, ref slot);
+        SetStatusIcon(8, tauntRemaining > 0f, tauntRemaining, visibleCount, ref slot);
+        SetStatusIcon(0, currentShield > 0, shieldRemaining, visibleCount, ref slot);
+        SetStatusIcon(5, hasteRemaining > 0f, hasteRemaining, visibleCount, ref slot);
+        SetStatusIcon(6, attackBuffRemaining > 0f, attackBuffRemaining, visibleCount, ref slot);
+    }
+
+    private void SetStackCount(int iconIndex, int count)
+    {
+        if (statusCounts == null || iconIndex < 0 || iconIndex >= statusCounts.Length)
+        {
+            return;
+        }
+
+        statusCounts[iconIndex].text = count > 1 ? count.ToString() : string.Empty;
+        statusCounts[iconIndex].gameObject.SetActive(IsAlive && count > 0 && statusIcons[iconIndex].enabled);
+    }
+
+    private void SetStatusIcon(
+        int index,
+        bool active,
+        float remaining,
+        int visibleCount,
+        ref int slot)
+    {
+        var renderer = statusIcons[index];
+        if (!IsAlive || !active || slot >= 5)
+        {
+            renderer.enabled = false;
+            if (statusCounts != null) statusCounts[index].gameObject.SetActive(false);
+            return;
+        }
+
+        renderer.transform.localPosition = new Vector3((slot - (visibleCount - 1) * 0.5f) * 0.38f, 0f);
+        renderer.enabled = remaining > 1f || (Mathf.FloorToInt(Time.time * 8f) & 1) == 0;
+        slot++;
     }
 
     private void UpdateHealthBar()
     {
         var ratio = (float)currentHealth / MaxHealth;
+        var healthBarY = bodySize * 0.5f + 0.12f;
         healthFill.transform.localScale = new Vector3(HealthBarWidth * ratio, 0.09f, 1f);
-        healthFill.transform.localPosition = new Vector3(-HealthBarWidth * (1f - ratio) * 0.5f, 0.78f);
+        healthFill.transform.localPosition = new Vector3(-HealthBarWidth * (1f - ratio) * 0.5f, healthBarY);
     }
 
     private void UpdateEnergyBar()
@@ -2479,11 +3918,14 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }
 
         var ratio = energy / MaxEnergy;
+        var energyBarY = bodySize * 0.5f - 0.04f;
         energyFill.transform.localScale = new Vector3(HealthBarWidth * ratio, 0.06f, 1f);
-        energyFill.transform.localPosition = new Vector3(-HealthBarWidth * (1f - ratio) * 0.5f, 0.61f);
+        energyFill.transform.localPosition = new Vector3(-HealthBarWidth * (1f - ratio) * 0.5f, energyBarY);
+        if (ultimateReadyVisual != null)
+        {
+            ultimateReadyVisual.enabled = IsAlive && ratio >= 0.85f;
+        }
     }
-
-    private bool IsLastLightActive => SkillKit == PrototypeSkillKit.Nova && currentHealth <= MaxHealth * 0.35f;
 
     private float ActiveSkillInterval
     {
@@ -2532,7 +3974,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     {
         get
         {
-            var interval = IsLastLightActive ? AttackInterval * 0.7f : AttackInterval;
+            var interval = AttackInterval;
             if (hasteRemaining > 0f)
             {
                 interval *= 0.65f;
@@ -2554,9 +3996,11 @@ internal sealed class PrototypeBattleFeedback : MonoBehaviour
     private static PrototypeBattleFeedback instance;
 
     private AudioSource audioSource;
+    private AudioSource musicSource;
     private AudioClip hitClip;
     private AudioClip skillClip;
     private AudioClip ultimateClip;
+    private AudioClip battleLoopClip;
     private Vector3 restingPosition;
     private float shakeRemaining;
     private float shakeStrength;
@@ -2574,12 +4018,22 @@ internal sealed class PrototypeBattleFeedback : MonoBehaviour
         feedback.shakeStrength = Mathf.Max(feedback.shakeStrength, strong ? 0.08f : 0.025f);
         if (feedback.audioCooldown <= 0f)
         {
+            feedback.audioSource.pitch = 1f;
             feedback.audioSource.PlayOneShot(feedback.hitClip, strong ? 0.35f : 0.16f);
             feedback.audioCooldown = 0.045f;
         }
     }
 
-    public static void PlayAction(bool ultimate)
+    public static void StartBattleLoop()
+    {
+        var feedback = Get();
+        if (feedback != null && !feedback.musicSource.isPlaying)
+        {
+            feedback.musicSource.Play();
+        }
+    }
+
+    public static void PlayAction(PrototypeSkillKit kit, bool ultimate)
     {
         var feedback = Get();
         if (feedback == null)
@@ -2587,12 +4041,25 @@ internal sealed class PrototypeBattleFeedback : MonoBehaviour
             return;
         }
 
+        feedback.audioSource.pitch = ActionPitch(kit, ultimate);
         feedback.audioSource.PlayOneShot(ultimate ? feedback.ultimateClip : feedback.skillClip, 0.42f);
         if (ultimate)
         {
             feedback.shakeRemaining = Mathf.Max(feedback.shakeRemaining, 0.18f);
             feedback.shakeStrength = Mathf.Max(feedback.shakeStrength, 0.06f);
         }
+    }
+
+    private static float ActionPitch(PrototypeSkillKit kit, bool ultimate)
+    {
+        var pitch = kit == PrototypeSkillKit.Nova ? 1.08f
+            : kit == PrototypeSkillKit.Ion ? 1.28f
+            : kit == PrototypeSkillKit.Astra ? 1.18f
+            : kit == PrototypeSkillKit.Lyra ? 1.36f
+            : kit == PrototypeSkillKit.Brakk ? 0.82f
+            : kit == PrototypeSkillKit.Krag ? 0.7f
+            : 1f;
+        return ultimate ? pitch * 0.88f : pitch;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -2644,9 +4111,23 @@ internal sealed class PrototypeBattleFeedback : MonoBehaviour
             audioSource.spatialBlend = 0f;
         }
 
+        if (musicSource == null)
+        {
+            musicSource = gameObject.AddComponent<AudioSource>();
+            musicSource.playOnAwake = false;
+            musicSource.loop = true;
+            musicSource.spatialBlend = 0f;
+            musicSource.volume = 0.08f;
+        }
+
         if (hitClip == null) hitClip = CreateTone("Pixel Hit", 150f, 0.045f);
         if (skillClip == null) skillClip = CreateTone("Pixel Skill", 420f, 0.12f);
         if (ultimateClip == null) ultimateClip = CreateTone("Pixel Ultimate", 220f, 0.22f);
+        if (battleLoopClip == null)
+        {
+            battleLoopClip = CreateBattleLoop();
+            musicSource.clip = battleLoopClip;
+        }
     }
 
     private void Update()
@@ -2660,7 +4141,7 @@ internal sealed class PrototypeBattleFeedback : MonoBehaviour
 
         shakeRemaining -= Time.unscaledDeltaTime;
         var offset = Random.insideUnitCircle * shakeStrength;
-        const float pixelUnit = 1f / 32f;
+        const float pixelUnit = 1f / 64f;
         offset.x = Mathf.Round(offset.x / pixelUnit) * pixelUnit;
         offset.y = Mathf.Round(offset.y / pixelUnit) * pixelUnit;
         transform.localPosition = restingPosition + new Vector3(offset.x, offset.y, 0f);
@@ -2686,30 +4167,108 @@ internal sealed class PrototypeBattleFeedback : MonoBehaviour
         clip.SetData(samples, 0);
         return clip;
     }
+
+    private static AudioClip CreateBattleLoop()
+    {
+        const float duration = 2f;
+        var sampleCount = Mathf.CeilToInt(SampleRate * duration);
+        var samples = new float[sampleCount];
+        var notes = new[] { 220f, 277.18f, 329.63f, 277.18f };
+        for (var index = 0; index < sampleCount; index++)
+        {
+            var time = (float)index / SampleRate;
+            var note = notes[Mathf.FloorToInt(time * 4f) % notes.Length];
+            var pulse = Mathf.Sign(Mathf.Sin(2f * Mathf.PI * note * time)) * 0.035f;
+            var bass = Mathf.Sin(2f * Mathf.PI * 55f * time) * 0.04f;
+            samples[index] = pulse + bass;
+        }
+
+        var clip = AudioClip.Create("Pixel Battle Loop", sampleCount, 1, SampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
 }
 
 internal sealed class PrototypeEffect : MonoBehaviour
 {
-    private SpriteRenderer spriteRenderer;
+    private SpriteRenderer[] layers;
     private float startScale;
     private float endScale;
     private float duration;
     private float elapsed;
+    private float rotationSpeed = 120f;
 
     public static void Spawn(Sprite sprite, Vector3 position, Color color, float start, float end, float lifetime)
     {
         var gameObject = new GameObject("Skill Effect");
         gameObject.transform.position = position;
+        gameObject.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
 
         var effect = gameObject.AddComponent<PrototypeEffect>();
-        effect.spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
-        effect.spriteRenderer.sprite = sprite;
-        effect.spriteRenderer.color = new Color(color.r, color.g, color.b, 0.5f);
-        effect.spriteRenderer.sortingOrder = 8;
+        effect.layers = new SpriteRenderer[5];
+        effect.layers[0] = AddEffectLayer(gameObject.transform, "Core", sprite, color, Vector3.zero, new Vector3(0.5f, 0.5f), 109);
+        effect.layers[1] = AddEffectLayer(gameObject.transform, "Ray Up", sprite, color, new Vector3(0f, 0.55f), new Vector3(0.12f, 0.7f), 108);
+        effect.layers[2] = AddEffectLayer(gameObject.transform, "Ray Down", sprite, color, new Vector3(0f, -0.55f), new Vector3(0.12f, 0.7f), 108);
+        effect.layers[3] = AddEffectLayer(gameObject.transform, "Ray Left", sprite, color, new Vector3(-0.55f, 0f), new Vector3(0.7f, 0.12f), 108);
+        effect.layers[4] = AddEffectLayer(gameObject.transform, "Ray Right", sprite, color, new Vector3(0.55f, 0f), new Vector3(0.7f, 0.12f), 108);
         effect.startScale = start;
         effect.endScale = end;
         effect.duration = lifetime;
         gameObject.transform.localScale = new Vector3(start, start, 1f);
+    }
+
+    public static void SpawnLine(
+        Sprite sprite,
+        Vector3 start,
+        Vector3 end,
+        Color color,
+        float lifetime,
+        float thickness)
+    {
+        var delta = end - start;
+        if (delta.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        var gameObject = new GameObject("Skill Line");
+        gameObject.transform.position = (start + end) * 0.5f;
+        gameObject.transform.rotation = Quaternion.Euler(
+            0f,
+            0f,
+            Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+        var effect = gameObject.AddComponent<PrototypeEffect>();
+        effect.layers = new[]
+        {
+            AddEffectLayer(
+                gameObject.transform,
+                "Beam",
+                sprite,
+                color,
+                Vector3.zero,
+                new Vector3(delta.magnitude, thickness, 1f),
+                110)
+        };
+        effect.startScale = 1f;
+        effect.endScale = 1f;
+        effect.duration = lifetime;
+        effect.rotationSpeed = 0f;
+    }
+
+    public static void SpawnBarrier(Sprite sprite, Vector3 position, Color color, float lifetime)
+    {
+        var gameObject = new GameObject("Skill Barrier");
+        gameObject.transform.position = position;
+        var effect = gameObject.AddComponent<PrototypeEffect>();
+        effect.layers = new SpriteRenderer[4];
+        effect.layers[0] = AddEffectLayer(gameObject.transform, "Top", sprite, color, new Vector3(0f, 0.7f), new Vector3(1.35f, 0.08f), 108);
+        effect.layers[1] = AddEffectLayer(gameObject.transform, "Bottom", sprite, color, new Vector3(0f, -0.7f), new Vector3(1.35f, 0.08f), 108);
+        effect.layers[2] = AddEffectLayer(gameObject.transform, "Left", sprite, color, new Vector3(-0.7f, 0f), new Vector3(0.08f, 1.35f), 108);
+        effect.layers[3] = AddEffectLayer(gameObject.transform, "Right", sprite, color, new Vector3(0.7f, 0f), new Vector3(0.08f, 1.35f), 108);
+        effect.startScale = 0.72f;
+        effect.endScale = 1.08f;
+        effect.duration = lifetime;
+        effect.rotationSpeed = 0f;
     }
 
     private void Update()
@@ -2718,11 +4277,153 @@ internal sealed class PrototypeEffect : MonoBehaviour
         var progress = Mathf.Clamp01(elapsed / duration);
         var scale = Mathf.Lerp(startScale, endScale, progress);
         transform.localScale = new Vector3(scale, scale, 1f);
+        transform.Rotate(0f, 0f, rotationSpeed * Time.deltaTime);
 
+        foreach (var layer in layers)
+        {
+            var color = layer.color;
+            color.a = Mathf.Lerp(0.65f, 0f, progress);
+            layer.color = color;
+        }
+
+        if (progress >= 1f)
+        {
+            Destroy(gameObject);
+        }
+    }
+
+    private static SpriteRenderer AddEffectLayer(
+        Transform parent,
+        string name,
+        Sprite sprite,
+        Color color,
+        Vector3 position,
+        Vector3 scale,
+        int sortingOrder)
+    {
+        var gameObject = new GameObject(name);
+        gameObject.transform.SetParent(parent, false);
+        gameObject.transform.localPosition = position;
+        gameObject.transform.localScale = scale;
+        var renderer = gameObject.AddComponent<SpriteRenderer>();
+        renderer.sprite = sprite;
+        renderer.color = new Color(color.r, color.g, color.b, 0.65f);
+        renderer.sortingOrder = sortingOrder;
+        return renderer;
+    }
+}
+
+internal sealed class PrototypeProjectile : MonoBehaviour
+{
+    private Vector3 start;
+    private Vector3 end;
+    private float duration;
+    private float elapsed;
+    private float arcHeight;
+
+    public static void Spawn(Sprite sprite, Vector3 start, Vector3 end, Color color, float duration)
+    {
+        Create(sprite, start, end, color, duration, 0f);
+    }
+
+    public static void SpawnArc(
+        Sprite sprite,
+        Vector3 start,
+        Vector3 end,
+        Color color,
+        float duration,
+        float arcHeight)
+    {
+        Create(sprite, start, end, color, duration, arcHeight);
+    }
+
+    private static void Create(
+        Sprite sprite,
+        Vector3 start,
+        Vector3 end,
+        Color color,
+        float duration,
+        float arcHeight)
+    {
+        var gameObject = new GameObject("Combat Projectile");
+        gameObject.transform.position = start;
+        var delta = end - start;
+        gameObject.transform.rotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+        var projectile = gameObject.AddComponent<PrototypeProjectile>();
+        projectile.start = start;
+        projectile.end = end;
+        projectile.duration = Mathf.Max(0.05f, duration);
+        projectile.arcHeight = arcHeight;
+        AddLayer(gameObject.transform, "Trail", sprite, new Color(color.r, color.g, color.b, 0.35f), new Vector3(-0.18f, 0f), new Vector3(0.38f, 0.08f), 111);
+        AddLayer(gameObject.transform, "Core", sprite, color, Vector3.zero, new Vector3(0.14f, 0.14f), 112);
+    }
+
+    private void Update()
+    {
+        elapsed += Time.deltaTime;
+        var progress = Mathf.Clamp01(elapsed / duration);
+        var position = Vector3.Lerp(start, end, progress);
+        position.y += Mathf.Sin(progress * Mathf.PI) * arcHeight;
+        transform.position = position;
+        if (progress >= 1f)
+        {
+            Destroy(gameObject);
+        }
+    }
+
+    private static SpriteRenderer AddLayer(
+        Transform parent,
+        string name,
+        Sprite sprite,
+        Color color,
+        Vector3 position,
+        Vector3 scale,
+        int order)
+    {
+        var child = new GameObject(name);
+        child.transform.SetParent(parent, false);
+        child.transform.localPosition = position;
+        child.transform.localScale = scale;
+        var renderer = child.AddComponent<SpriteRenderer>();
+        renderer.sprite = sprite;
+        renderer.color = color;
+        renderer.sortingOrder = order;
+        return renderer;
+    }
+}
+
+internal sealed class PrototypeAfterimage : MonoBehaviour
+{
+    private const float Lifetime = 0.18f;
+    private SpriteRenderer spriteRenderer;
+    private float elapsed;
+
+    public static void Spawn(SpriteRenderer source, int sortingOrder, Color accent)
+    {
+        if (source == null || source.sprite == null)
+        {
+            return;
+        }
+
+        var gameObject = new GameObject("Combat Afterimage");
+        gameObject.transform.position = source.transform.position;
+        gameObject.transform.rotation = source.transform.rotation;
+        gameObject.transform.localScale = source.transform.lossyScale;
+        var afterimage = gameObject.AddComponent<PrototypeAfterimage>();
+        afterimage.spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
+        afterimage.spriteRenderer.sprite = source.sprite;
+        afterimage.spriteRenderer.flipX = source.flipX;
+        afterimage.spriteRenderer.color = new Color(accent.r, accent.g, accent.b, 0.22f);
+        afterimage.spriteRenderer.sortingOrder = sortingOrder;
+    }
+
+    private void Update()
+    {
+        elapsed += Time.deltaTime;
+        var progress = Mathf.Clamp01(elapsed / Lifetime);
         var color = spriteRenderer.color;
-        color.a = Mathf.Lerp(0.5f, 0f, progress);
+        color.a = Mathf.Lerp(0.22f, 0f, progress);
         spriteRenderer.color = color;
-
         if (progress >= 1f)
         {
             Destroy(gameObject);
@@ -2738,18 +4439,23 @@ internal sealed class PrototypeDamageNumber : MonoBehaviour
 
     public static void Spawn(Vector3 position, int damage, Color color)
     {
+        SpawnText(position, damage.ToString(), color);
+    }
+
+    public static void SpawnText(Vector3 position, string value, Color color)
+    {
         var gameObject = new GameObject("Damage Number");
         gameObject.transform.position = position;
         var number = gameObject.AddComponent<PrototypeDamageNumber>();
         number.textMesh = gameObject.AddComponent<TextMesh>();
-        number.textMesh.text = damage.ToString();
+        number.textMesh.text = value;
         number.textMesh.anchor = TextAnchor.MiddleCenter;
         number.textMesh.alignment = TextAlignment.Center;
         number.textMesh.fontSize = 40;
         number.textMesh.characterSize = 0.07f;
         number.textMesh.color = color;
         number.textMesh.fontStyle = FontStyle.Bold;
-        gameObject.GetComponent<MeshRenderer>().sortingOrder = 20;
+        gameObject.GetComponent<MeshRenderer>().sortingOrder = 120;
     }
 
     private void Update()

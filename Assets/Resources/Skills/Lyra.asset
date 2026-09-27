@@ -39,7 +39,7 @@ MonoBehaviour:
     energyGain: 0
   ultimate:
     displayName: Helios Rain
-    description: Damage and burn the entire enemy team.
+    description: Rain fire on all enemies and hit already-burning targets with greater impact.
     cooldown: 0
     actionDuration: 0.76
     hitFrame: 0.52

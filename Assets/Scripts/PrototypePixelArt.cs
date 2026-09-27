@@ -7,6 +7,7 @@ internal enum PrototypeAnimationState
     Run,
     Attack,
     Skill,
+    Ultimate,
     Hit,
     Death
 }
@@ -17,15 +18,29 @@ internal sealed class PrototypeSpriteSet
     public readonly Sprite[] Run;
     public readonly Sprite[] Attack;
     public readonly Sprite[] Skill;
+    public readonly Sprite[] Ultimate;
     public readonly Sprite[] Hit;
     public readonly Sprite[] Death;
 
     public PrototypeSpriteSet(Sprite[] idle, Sprite[] run, Sprite[] attack, Sprite[] skill, Sprite[] hit, Sprite[] death)
+        : this(idle, run, attack, skill, skill, hit, death)
+    {
+    }
+
+    public PrototypeSpriteSet(
+        Sprite[] idle,
+        Sprite[] run,
+        Sprite[] attack,
+        Sprite[] skill,
+        Sprite[] ultimate,
+        Sprite[] hit,
+        Sprite[] death)
     {
         Idle = idle;
         Run = run;
         Attack = attack;
         Skill = skill;
+        Ultimate = ultimate;
         Hit = hit;
         Death = death;
     }
@@ -37,6 +52,7 @@ internal sealed class PrototypeSpriteSet
             case PrototypeAnimationState.Run: return Run;
             case PrototypeAnimationState.Attack: return Attack;
             case PrototypeAnimationState.Skill: return Skill;
+            case PrototypeAnimationState.Ultimate: return Ultimate;
             case PrototypeAnimationState.Hit: return Hit;
             case PrototypeAnimationState.Death: return Death;
             default: return Idle;
@@ -53,14 +69,30 @@ internal static class PrototypePixelArt
 
     public static PrototypeSpriteSet Create(CombatantDefinition definition)
     {
-        var generated = Create(
-            definition.Species,
-            definition.CombatClass,
-            definition.SkillKit,
-            definition.BodyColor);
+        return Create(definition, false);
+    }
+
+    public static PrototypeSpriteSet Create(CombatantDefinition definition, bool boss)
+    {
+        var generated = PrototypeHeroPixelArt64.Supports(definition.SkillKit)
+            ? PrototypeHeroPixelArt64.Create(definition.SkillKit, definition.BodyColor, boss)
+            : Create(definition.Species, definition.CombatClass, definition.SkillKit, definition.BodyColor);
         if (!definition.HasImportedSprites)
         {
             return generated;
+        }
+
+        if (definition.HasStaticImportedSprite)
+        {
+            var sprite = definition.IdleFrames[0];
+            return new PrototypeSpriteSet(
+                Repeat(sprite, 2),
+                Repeat(sprite, 4),
+                Repeat(sprite, 4),
+                Repeat(sprite, 4),
+                Repeat(sprite, 4),
+                Repeat(sprite, 2),
+                Repeat(sprite, 3));
         }
 
         return new PrototypeSpriteSet(
@@ -68,8 +100,19 @@ internal static class PrototypePixelArt
             FramesOrFallback(definition.RunFrames, generated.Run),
             FramesOrFallback(definition.AttackFrames, generated.Attack),
             FramesOrFallback(definition.SkillFrames, generated.Skill),
+            FramesOrFallback(definition.UltimateFrames, generated.Ultimate),
             FramesOrFallback(definition.HitFrames, generated.Hit),
             FramesOrFallback(definition.DeathFrames, generated.Death));
+    }
+
+    private static Sprite[] Repeat(Sprite sprite, int count)
+    {
+        var frames = new Sprite[count];
+        for (var index = 0; index < count; index++)
+        {
+            frames[index] = sprite;
+        }
+        return frames;
     }
 
     public static PrototypeSpriteSet Create(
@@ -138,7 +181,7 @@ internal static class PrototypePixelArt
         {
             filterMode = FilterMode.Point,
             wrapMode = TextureWrapMode.Clamp,
-            name = $"{species}_{state}_{frame}"
+            name = $"{skillKit}_{species}_{state}_{frame}"
         };
 
         var pixels = new Color32[Size * Size];
@@ -295,6 +338,33 @@ internal static class PrototypePixelArt
                 Line(p, 25, 20, 29, 15 - Mathf.Min(frame, 2), accent);
                 Pixel(p, 14, 23, accent);
                 Pixel(p, 19, 23, accent);
+                break;
+            case PrototypeSkillKit.Astra:
+                Line(p, 16, 19, 16, 25, light);
+                Line(p, 13, 22, 19, 22, accent);
+                if (state == PrototypeAnimationState.Skill)
+                {
+                    Pixel(p, 7 + frame, 25, accent);
+                    Pixel(p, 24 - frame, 27, light);
+                    Ring(p, 16, 20, 8 + frame * 2, accent);
+                }
+                break;
+            case PrototypeSkillKit.Lyra:
+                Line(p, 11, 26, 16, 29, accent);
+                Line(p, 16, 29, 21, 26, light);
+                if (state == PrototypeAnimationState.Attack || state == PrototypeAnimationState.Skill)
+                {
+                    Line(p, 22, 17, 31, 17 + Mathf.Min(frame, 2), accent);
+                }
+                break;
+            case PrototypeSkillKit.Brakk:
+                Rect(p, 12, 18, 3, 5, light);
+                Rect(p, 18, 18, 3, 5, accent);
+                Pixel(p, 16, 21, accent);
+                if (state == PrototypeAnimationState.Skill)
+                {
+                    Ring(p, 16, 18, 16 + frame * 2, accent);
+                }
                 break;
         }
     }

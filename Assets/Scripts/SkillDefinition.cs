@@ -48,20 +48,46 @@ public sealed class SkillDefinition : ScriptableObject
     [SerializeField] private PrototypeSkillKit skillKit;
     [SerializeField] private PrototypeSkillData basic;
     [SerializeField] private PrototypeSkillData passive;
+    [SerializeField] private PrototypeSkillData passive2;
+    [SerializeField] private PrototypeSkillData passive3;
     [SerializeField] private PrototypeSkillData active;
     [SerializeField] private PrototypeSkillData ultimate;
 
     public PrototypeSkillKit SkillKit => skillKit;
     public PrototypeSkillData Basic => basic;
     public PrototypeSkillData Passive => passive;
+    public PrototypeSkillData Passive2 => HasContent(passive2) ? passive2 : null;
+    public PrototypeSkillData Passive3 => HasContent(passive3) ? passive3 : null;
     public PrototypeSkillData Active => active;
     public PrototypeSkillData Ultimate => ultimate;
 
-    public string Summary =>
-        $"Basic · {basic.DisplayName}: {basic.Description}\n" +
-        $"Passive · {passive.DisplayName}: {passive.Description}\n" +
-        $"Active · {active.DisplayName}: {active.Description}\n" +
-        $"Ultimate · {ultimate.DisplayName}: {ultimate.Description}";
+    public string Summary
+    {
+        get
+        {
+            var rows = new List<string>
+            {
+                $"Basic - {basic.DisplayName}: {basic.Description}",
+                $"Passive 1 - {passive.DisplayName}: {passive.Description}"
+            };
+            if (Passive2 != null)
+            {
+                rows.Add($"Passive 2 - {Passive2.DisplayName}: {Passive2.Description}");
+            }
+            if (Passive3 != null)
+            {
+                rows.Add($"Passive 3 - {Passive3.DisplayName}: {Passive3.Description}");
+            }
+            rows.Add($"Active - {active.DisplayName}: {active.Description}");
+            rows.Add($"Ultimate - {ultimate.DisplayName}: {ultimate.Description}");
+            return string.Join("\n", rows);
+        }
+    }
+
+    private static bool HasContent(PrototypeSkillData skill)
+    {
+        return skill != null && !string.IsNullOrEmpty(skill.DisplayName);
+    }
 
 #if UNITY_EDITOR
     public void EditorConfigure(
@@ -69,11 +95,15 @@ public sealed class SkillDefinition : ScriptableObject
         PrototypeSkillData basicSkill,
         PrototypeSkillData passiveSkill,
         PrototypeSkillData activeSkill,
-        PrototypeSkillData ultimateSkill)
+        PrototypeSkillData ultimateSkill,
+        PrototypeSkillData passiveSkill2 = null,
+        PrototypeSkillData passiveSkill3 = null)
     {
         skillKit = kit;
         basic = basicSkill;
         passive = passiveSkill;
+        passive2 = passiveSkill2;
+        passive3 = passiveSkill3;
         active = activeSkill;
         ultimate = ultimateSkill;
     }

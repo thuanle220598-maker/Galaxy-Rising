@@ -1,0 +1,6 @@
+{
+  "name": "GalaxyRising.PlayModeTests",
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

@@ -15,7 +15,7 @@ MonoBehaviour:
   skillKit: 3
   basic:
     displayName: Guiding Light
-    description: Every third attack heals the weakest ally.
+    description: Every third attack heals the weakest ally and reinforces an existing shield.
     cooldown: 0
     actionDuration: 0.38
     hitFrame: 0.5
@@ -31,7 +31,7 @@ MonoBehaviour:
     energyGain: 0
   active:
     displayName: Star Ward
-    description: Heal and shield the weakest ally.
+    description: Heal the weakest ally, reinforce an existing shield, then grant protection.
     cooldown: 6
     actionDuration: 0.56
     hitFrame: 0.48
@@ -39,7 +39,7 @@ MonoBehaviour:
     energyGain: 0
   ultimate:
     displayName: Astral Renewal
-    description: Heal the whole team and heavily protect the weakest ally.
+    description: Heal the team, reinforce existing shields and protect the weakest ally.
     cooldown: 0
     actionDuration: 0.78
     hitFrame: 0.5

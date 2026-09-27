@@ -2,11 +2,14 @@ using UnityEngine;
 
 internal static class PrototypeSaveSystem
 {
-    private const int CurrentVersion = 2;
+    private const int CurrentVersion = 4;
     private const string VersionKey = "Prototype.SaveVersion";
+    internal const string OnboardingStepKey = "Prototype.OnboardingStep";
+    internal const int OnboardingCompleteStep = 6;
     private static readonly string[] Keys =
     {
         VersionKey,
+        OnboardingStepKey,
         "Prototype.IdleStage",
         "Prototype.IdleBossPending",
         "Prototype.LastIdleClaim",
@@ -26,8 +29,40 @@ internal static class PrototypeSaveSystem
             return;
         }
 
-        // Version 2 adds persistent squad data; older progression remains compatible.
+        // Existing saves skip first-time onboarding; new and reset saves start at step zero.
+        if (version < 3)
+        {
+            PlayerPrefs.SetInt(OnboardingStepKey, version == 0 ? 0 : OnboardingCompleteStep);
+        }
+        if (version < 4)
+        {
+            PrototypeProgression.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyNova,
+                PrototypeCharacterNames.FireGodHeavenlyDemon);
+            PrototypeGacha.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyNova,
+                PrototypeCharacterNames.FireGodHeavenlyDemon);
+            PrototypeSession.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyNova,
+                PrototypeCharacterNames.FireGodHeavenlyDemon);
+        }
         PlayerPrefs.SetInt(VersionKey, CurrentVersion);
+        PlayerPrefs.Save();
+    }
+
+    public static int OnboardingStep => Mathf.Clamp(
+        PlayerPrefs.GetInt(OnboardingStepKey, 0),
+        0,
+        OnboardingCompleteStep);
+
+    public static void AdvanceOnboarding(int expectedStep)
+    {
+        if (OnboardingStep != expectedStep || expectedStep >= OnboardingCompleteStep)
+        {
+            return;
+        }
+
+        PlayerPrefs.SetInt(OnboardingStepKey, expectedStep + 1);
         PlayerPrefs.Save();
     }
 

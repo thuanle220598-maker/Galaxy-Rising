@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -18,8 +19,10 @@ internal static class PrototypeContentGenerator
         EnsureFolder(Root, "Stages");
         EnsureFolder(Root, "Dungeons");
         EnsureFolder(Root + "/Combatants", "Roster");
+        EnsureFolder(Root + "/Combatants", "Monsters");
 
         CreateSkillSets();
+        ConfigureFireGodHeavenlyDemon();
         for (var stage = 1; stage <= 20; stage++)
         {
             CreateStage(stage);
@@ -34,6 +37,24 @@ internal static class PrototypeContentGenerator
         CreateHero(
             "Drake", PrototypeSpecies.Dragon, PrototypeCombatClass.Fighter, PrototypeRarity.UR,
             new Color(0.92f, 0.24f, 0.1f), 185, 31, 8, 2.05f, 0.92f, PrototypeSkillKit.Drake, 1);
+        CreateMonster(
+            "Watcher", "Watcher.png", PrototypeSpecies.Fantasy, PrototypeCombatClass.Fighter,
+            new Color(0.88f, 0.72f, 0.55f), 180, 26, 7, 1.9f, 1f, 0);
+        CreateMonster(
+            "Emberwing", "Emberwing.png", PrototypeSpecies.Dragon, PrototypeCombatClass.Fighter,
+            new Color(0.65f, 0.12f, 0.16f), 165, 31, 6, 2.15f, 0.9f, 1);
+        CreateMonster(
+            "Voidroot", "Voidroot.png", PrototypeSpecies.Cosmic, PrototypeCombatClass.Mage,
+            new Color(0.22f, 0.12f, 0.35f), 135, 32, 4, 1.75f, 1.15f, 2);
+        CreateMonster(
+            "Toxibot", "Toxibot.png", PrototypeSpecies.Machine, PrototypeCombatClass.Tanker,
+            new Color(0.35f, 0.2f, 0.58f), 230, 22, 12, 1.55f, 1.2f, 3);
+        CreateMonster(
+            "Razorjaw", "Razorjaw.png", PrototypeSpecies.Fantasy, PrototypeCombatClass.Tanker,
+            new Color(0.12f, 0.35f, 0.55f), 210, 25, 10, 1.6f, 1.1f, 4, true);
+        CreateMonster(
+            "Tide Slime", "TideSlime.png", PrototypeSpecies.Ocean, PrototypeCombatClass.Support,
+            new Color(0.08f, 0.58f, 0.8f), 160, 24, 6, 1.7f, 1.1f, 5);
 
         AssetDatabase.SaveAssets();
     }
@@ -41,10 +62,12 @@ internal static class PrototypeContentGenerator
     private static void CreateSkillSets()
     {
         CreateSkill(PrototypeSkillKit.Nova,
-            S("Photon Brand", "Every third hit marks the target for amplified Nova damage.", 0f, 0.36f, 0.5f, 1f, 18),
-            S("Aegis Reactor", "At half health, gain a shield; at critical health, attack and charge faster.", 0f, 0.2f, 0.5f, 1f),
-            S("Solar Thrust", "Damage and mark one enemy, then shield Nova.", 6f, 0.52f, 0.52f, 1.45f),
-            S("Stellar Breaker", "Heavy single-target strike with splash damage to all enemies.", 0f, 0.72f, 0.53f, 2.2f));
+            S("Flame Strike", "Fire attack that applies Ash; at three Ash, consumes the marks for splash and a delayed explosion.", 0f, 0.56f, 0.3214286f, 1f, 18),
+            S("Ignition Core", "Direct Fire hits build up to three Ash Marks; each mark reduces Fire Resistance by 5%.", 0f, 0.2f, 0.5f, 1f),
+            S("Hellfire Impact", "Fire AoE and knock-up that leaves a slowing Magma Pool; three Ash trigger True Damage and a decaying slow.", 6f, 1.3f, 0.6153846f, 1.45f),
+            S("Crimson Gale", "Directional Fire wave with knockback, Ash missing-health detonation, Grounded Scorch, and Magma-to-Firestorm conversion.", 0f, 1.3f, 0.6153846f, 2.2f),
+            S("Thermal Resonance", "Fire damage against Burning or detonated targets restores energy and builds Heat; critical health triggers Flame Shield.", 0f, 0.2f, 0.5f, 1f),
+            S("Everburning Embers", "Fire DoT kills spread two Ash Marks and half of the remaining DoT to nearby enemies.", 0f, 0.2f, 0.5f, 1f));
         CreateSkill(PrototypeSkillKit.Ion,
             S("Arc Sequence", "Every fourth hit chains lightning to another enemy.", 0f, 0.34f, 0.5f, 1f, 18),
             S("Phase Shift", "Every fifth incoming hit is ignored and restores energy.", 0f, 0.2f, 0.5f, 1f),
@@ -119,7 +142,9 @@ internal static class PrototypeContentGenerator
         PrototypeSkillData basic,
         PrototypeSkillData passive,
         PrototypeSkillData active,
-        PrototypeSkillData ultimate)
+        PrototypeSkillData ultimate,
+        PrototypeSkillData passive2 = null,
+        PrototypeSkillData passive3 = null)
     {
         var path = $"{Root}/Skills/{kit}.asset";
         if (AssetDatabase.LoadAssetAtPath<SkillDefinition>(path) != null)
@@ -128,8 +153,67 @@ internal static class PrototypeContentGenerator
         }
 
         var asset = ScriptableObject.CreateInstance<SkillDefinition>();
-        asset.EditorConfigure(kit, basic, passive, active, ultimate);
+        asset.EditorConfigure(kit, basic, passive, active, ultimate, passive2, passive3);
         AssetDatabase.CreateAsset(asset, path);
+    }
+
+    private static void ConfigureFireGodHeavenlyDemon()
+    {
+        const string combatantPath = "Assets/Resources/Combatants/Allies/Nova.asset";
+        const string skillPath = "Assets/Resources/Skills/Nova.asset";
+        var combatant = AssetDatabase.LoadAssetAtPath<CombatantDefinition>(combatantPath);
+        var skill = AssetDatabase.LoadAssetAtPath<SkillDefinition>(skillPath);
+        if (combatant == null || skill == null)
+        {
+            return;
+        }
+
+        combatant.EditorConfigure(
+            PrototypeCharacterNames.FireGodHeavenlyDemon,
+            PrototypeSpecies.Human,
+            PrototypeCombatClass.Mage,
+            PrototypeRarity.SSR,
+            new Color(1f, 0.28f, 0.05f),
+            combatant.MaxHealth,
+            combatant.Attack,
+            combatant.Defense,
+            combatant.MoveSpeed,
+            combatant.AttackInterval,
+            PrototypeSkillKit.Nova,
+            combatant.FormationOrder);
+        skill.EditorConfigure(
+            PrototypeSkillKit.Nova,
+            S("Flame Strike", "Fire attack that applies Ash; at three Ash, consumes the marks for splash and a delayed explosion.", 0f, 0.56f, 0.3214286f, 1f, 18),
+            S("Ignition Core", "Direct Fire hits build up to three Ash Marks; each mark reduces Fire Resistance by 5%.", 0f, 0.2f, 0.5f, 1f),
+            S("Hellfire Impact", "Fire AoE and knock-up that leaves a slowing Magma Pool; three Ash trigger True Damage and a decaying slow.", 6f, 1.3f, 0.6153846f, 1.45f),
+            S("Crimson Gale", "Directional Fire wave with knockback, Ash missing-health detonation, Grounded Scorch, and Magma-to-Firestorm conversion.", 0f, 1.3f, 0.6153846f, 2.2f),
+            S("Thermal Resonance", "Fire damage against Burning or detonated targets restores energy and builds Heat; critical health triggers Flame Shield.", 0f, 0.2f, 0.5f, 1f),
+            S("Everburning Embers", "Fire DoT kills spread two Ash Marks and half of the remaining DoT to nearby enemies.", 0f, 0.2f, 0.5f, 1f));
+
+        var idle = LoadSprites("Assets/Art/Characters/Nova/Combat/FireGodIdle.png");
+        var run = LoadSprites("Assets/Art/Characters/Nova/Combat/FireGodRun.png");
+        var attack = LoadSprites("Assets/Art/Characters/Nova/Combat/NovaFlameBasicAttack.png");
+        var active = LoadSprites("Assets/Art/Characters/Nova/Combat/FireGodActive.png");
+        var ultimate = LoadSprites("Assets/Art/Characters/Nova/Combat/FireGodUltimate.png");
+        var hit = LoadSprites("Assets/Art/Characters/Nova/Combat/FireGodHit.png");
+        var death = LoadSprites("Assets/Art/Characters/Nova/Combat/FireGodDeath.png");
+        if (idle.Length == 8 && run.Length == 13 && attack.Length == 8 && active.Length == 13 &&
+            ultimate.Length == 13 && hit.Length == 9 && death.Length == 9)
+        {
+            combatant.EditorConfigureAnimationFrames(
+                idle, run, attack, active, ultimate, hit, death);
+        }
+
+        EditorUtility.SetDirty(combatant);
+        EditorUtility.SetDirty(skill);
+    }
+
+    private static Sprite[] LoadSprites(string path)
+    {
+        return AssetDatabase.LoadAllAssetsAtPath(path)
+            .OfType<Sprite>()
+            .OrderBy(sprite => sprite.name)
+            .ToArray();
     }
 
     private static void CreateStage(int stage)
@@ -196,6 +280,41 @@ internal static class PrototypeContentGenerator
         asset.EditorConfigure(
             name, species, combatClass, rarity, color, health, attack, defense,
             speed, attackInterval, kit, order);
+        AssetDatabase.CreateAsset(asset, path);
+    }
+
+    private static void CreateMonster(
+        string name,
+        string spriteFile,
+        PrototypeSpecies species,
+        PrototypeCombatClass combatClass,
+        Color color,
+        int health,
+        int attack,
+        int defense,
+        float speed,
+        float attackInterval,
+        int order,
+        bool sourceFacesLeft = false)
+    {
+        var path = $"{Root}/Combatants/Monsters/{name.Replace(" ", string.Empty)}.asset";
+        if (AssetDatabase.LoadAssetAtPath<CombatantDefinition>(path) != null)
+        {
+            return;
+        }
+
+        var sprite = AssetDatabase.LoadAssetAtPath<Sprite>($"Assets/Art/Monsters/{spriteFile}");
+        if (sprite == null)
+        {
+            Debug.LogWarning($"Monster sprite is missing: {spriteFile}");
+            return;
+        }
+
+        var asset = ScriptableObject.CreateInstance<CombatantDefinition>();
+        asset.EditorConfigure(
+            name, species, combatClass, PrototypeRarity.R, color, health, attack, defense,
+            speed, attackInterval, PrototypeSkillKit.None, order);
+        asset.EditorConfigureStaticSprite(sprite, sourceFacesLeft);
         AssetDatabase.CreateAsset(asset, path);
     }
 

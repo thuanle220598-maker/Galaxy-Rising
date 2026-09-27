@@ -14,35 +14,56 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
   skillKit: 1
   basic:
-    displayName: Photon Brand
-    description: Every third hit marks the target for amplified Nova damage.
+    displayName: Flame Strike
+    description: Fire attack that applies Ash; at three Ash, consumes the marks for
+      splash and a delayed explosion.
     cooldown: 0
-    actionDuration: 0.36
-    hitFrame: 0.5
+    actionDuration: 0.56
+    hitFrame: 0.3214286
     powerMultiplier: 1
     energyGain: 18
   passive:
-    displayName: Aegis Reactor
-    description: At half health, gain a shield; at critical health, attack and charge
-      faster.
+    displayName: Ignition Core
+    description: Direct Fire hits build up to three Ash Marks; each mark reduces
+      Fire Resistance by 5%.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  passive2:
+    displayName: Thermal Resonance
+    description: Fire damage against Burning or detonated targets restores energy
+      and builds Heat; critical health triggers Flame Shield.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  passive3:
+    displayName: Everburning Embers
+    description: Fire DoT kills spread two Ash Marks and half of the remaining DoT
+      to nearby enemies.
     cooldown: 0
     actionDuration: 0.2
     hitFrame: 0.5
     powerMultiplier: 1
     energyGain: 0
   active:
-    displayName: Solar Thrust
-    description: Damage and mark one enemy, then shield Nova.
+    displayName: Hellfire Impact
+    description: Fire AoE and knock-up that leaves a slowing Magma Pool; three Ash
+      trigger True Damage and a decaying slow.
     cooldown: 6
-    actionDuration: 0.52
-    hitFrame: 0.52
+    actionDuration: 1.3
+    hitFrame: 0.6153846
     powerMultiplier: 1.45
     energyGain: 0
   ultimate:
-    displayName: Stellar Breaker
-    description: Heavy single-target strike with splash damage to all enemies.
+    displayName: Crimson Gale
+    description: Directional Fire wave with knockback, Ash missing-health detonation,
+      Grounded Scorch, and Magma-to-Firestorm conversion.
     cooldown: 0
-    actionDuration: 0.72
-    hitFrame: 0.53
+    actionDuration: 1.3
+    hitFrame: 0.6153846
     powerMultiplier: 2.2
     energyGain: 0

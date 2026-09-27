@@ -15,7 +15,7 @@ MonoBehaviour:
   skillKit: 2
   basic:
     displayName: Arc Sequence
-    description: Every fourth hit chains lightning to another enemy.
+    description: Every fourth hit chains toward burning enemies and can gain an extra bounce.
     cooldown: 0
     actionDuration: 0.34
     hitFrame: 0.5
@@ -31,7 +31,7 @@ MonoBehaviour:
     energyGain: 0
   active:
     displayName: Static Field
-    description: Damage and stun the target, then arc to another enemy.
+    description: Damage and stun the target, then arc toward burning enemies.
     cooldown: 7
     actionDuration: 0.5
     hitFrame: 0.54

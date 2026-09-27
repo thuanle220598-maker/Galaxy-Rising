@@ -25,7 +25,10 @@ internal static class PrototypeGacha
     private const string SaveKey = "Prototype.Gacha";
     private const int HighRarityPityLimit = 20;
     private const int UrPityLimit = 50;
-    private static readonly string[] StarterCharacters = { "Nova", "Ion", "Astra", "Lyra", "Brakk" };
+    private static readonly string[] StarterCharacters =
+    {
+        PrototypeCharacterNames.FireGodHeavenlyDemon, "Ion", "Astra", "Lyra", "Brakk"
+    };
     private static PrototypeGachaSave save;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -46,6 +49,20 @@ internal static class PrototypeGacha
     {
         EnsureLoaded();
         return save.ownedCharacters.Contains(characterName);
+    }
+
+    public static void MigrateCharacterName(string oldName, string newName)
+    {
+        EnsureLoaded();
+        var changed = save.ownedCharacters.RemoveAll(name => name == oldName) > 0;
+        if (changed && !save.ownedCharacters.Contains(newName))
+        {
+            save.ownedCharacters.Add(newName);
+        }
+        if (changed)
+        {
+            Save();
+        }
     }
 
     public static CombatantDefinition[] GetOwnedRoster(CombatantDefinition[] roster)

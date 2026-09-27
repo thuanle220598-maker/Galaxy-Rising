@@ -31,7 +31,7 @@ MonoBehaviour:
     energyGain: 0
   active:
     displayName: Guard Link
-    description: Shield and empower the weakest ally.
+    description: Shield and empower the weakest ally with a visible Guard Link.
     cooldown: 7
     actionDuration: 0.58
     hitFrame: 0.48

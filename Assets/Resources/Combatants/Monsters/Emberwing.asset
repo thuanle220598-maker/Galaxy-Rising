@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d93c40d65fe4d0f8a2e0ab4bc2cf1d7, type: 3}
+  m_Name: Emberwing
+  m_EditorClassIdentifier: Assembly-CSharp::CombatantDefinition
+  displayName: Emberwing
+  species: 2
+  combatClass: 2
+  rarity: 0
+  bodyColor: {r: 0.65, g: 0.12, b: 0.16, a: 1}
+  maxHealth: 165
+  attack: 31
+  defense: 6
+  moveSpeed: 2.15
+  attackInterval: 0.9
+  skillKit: 0
+  formationOrder: 1
+  idleFrames:
+  - {fileID: 21300000, guid: 9c7434c74dda410fbc50044f3f324266, type: 3}

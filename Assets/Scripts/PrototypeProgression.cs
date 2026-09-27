@@ -72,6 +72,39 @@ internal static class PrototypeProgression
         return created;
     }
 
+    public static void MigrateCharacterName(string oldName, string newName)
+    {
+        EnsureLoaded();
+        var oldRecord = save.characters.Find(character => character.characterName == oldName);
+        if (oldRecord == null)
+        {
+            return;
+        }
+
+        var newRecord = save.characters.Find(character => character.characterName == newName);
+        if (newRecord == null)
+        {
+            oldRecord.characterName = newName;
+        }
+        else
+        {
+            newRecord.level = Mathf.Max(newRecord.level, oldRecord.level);
+            newRecord.experience = Mathf.Max(newRecord.experience, oldRecord.experience);
+            newRecord.stars = Mathf.Max(newRecord.stars, oldRecord.stars);
+            newRecord.shards = Mathf.Max(newRecord.shards, oldRecord.shards);
+            newRecord.basicSkillLevel = Mathf.Max(newRecord.basicSkillLevel, oldRecord.basicSkillLevel);
+            newRecord.passiveSkillLevel = Mathf.Max(newRecord.passiveSkillLevel, oldRecord.passiveSkillLevel);
+            newRecord.activeSkillLevel = Mathf.Max(newRecord.activeSkillLevel, oldRecord.activeSkillLevel);
+            newRecord.ultimateSkillLevel = Mathf.Max(newRecord.ultimateSkillLevel, oldRecord.ultimateSkillLevel);
+            newRecord.weaponLevel = Mathf.Max(newRecord.weaponLevel, oldRecord.weaponLevel);
+            newRecord.armorLevel = Mathf.Max(newRecord.armorLevel, oldRecord.armorLevel);
+            newRecord.coreLevel = Mathf.Max(newRecord.coreLevel, oldRecord.coreLevel);
+            save.characters.Remove(oldRecord);
+        }
+
+        Save();
+    }
+
     public static int ExperienceRequired(PrototypeCharacterProgress progress)
     {
         return 50 + progress.level * 25;
@@ -179,6 +212,32 @@ internal static class PrototypeProgression
     public static float DefenseMultiplier(PrototypeCharacterProgress progress)
     {
         return LevelMultiplier(progress) * StarMultiplier(progress) * (1f + progress.coreLevel * 0.03f);
+    }
+
+    // ponytail: UI-only heuristic; move weights into balance data if power affects gameplay.
+    public static int GetPower(int health, int attack, int defense, int totalSkillLevels)
+    {
+        return health + attack * 10 + defense * 20 + totalSkillLevels * 5;
+    }
+
+    public static int GetPower(CombatantDefinition definition, PrototypeCharacterProgress progress)
+    {
+        return GetPower(
+            Mathf.RoundToInt(definition.MaxHealth * HealthMultiplier(progress)),
+            Mathf.RoundToInt(definition.Attack * AttackMultiplier(progress)),
+            Mathf.RoundToInt(definition.Defense * DefenseMultiplier(progress)),
+            progress.basicSkillLevel + progress.passiveSkillLevel +
+            progress.activeSkillLevel + progress.ultimateSkillLevel);
+    }
+
+    public static int GetTeamPower(IList<CombatantDefinition> definitions)
+    {
+        var power = 0;
+        foreach (var definition in definitions)
+        {
+            power += GetPower(definition, Get(definition.DisplayName));
+        }
+        return power;
     }
 
     public static int GetSkillLevel(PrototypeCharacterProgress progress, PrototypeSkillSlot slot)
