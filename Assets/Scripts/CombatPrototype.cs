@@ -954,6 +954,14 @@ internal sealed class PrototypeBattle : MonoBehaviour
         TimeLimit = timeLimit;
         DungeonType = dungeonType;
         DungeonLevel = dungeonLevel;
+        foreach (var combatant in allies)
+        {
+            combatant.OnBattleStarted();
+        }
+        foreach (var combatant in enemies)
+        {
+            combatant.OnBattleStarted();
+        }
     }
 
     public PrototypeCombatant FindClosestEnemy(PrototypeCombatant source)
@@ -1249,6 +1257,12 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private SpriteRenderer bossOrbit;
     private PrototypeFireVfx heatVfx;
     private PrototypeFireVfx flameShieldVfx;
+    private PrototypeWaterVfx dragonAuraVfx;
+    private PrototypeWaterVfx aureliaShieldVfx;
+    private PrototypeVoidVfx voidMassVfx;
+    private PrototypeVoidVfx voidParasiteVfx;
+    private PrototypeVoidVfx voidAscensionVfx;
+    private PrototypeVoidVfx voidCollapseVfx;
     private SpriteRenderer[] statusIcons;
     private TextMesh[] statusCounts;
     private SortingGroup sortingGroup;
@@ -1295,15 +1309,34 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private float abilityPowerMultiplier = 1f;
     private float guardLinkRemaining;
     private float flameShieldCooldown;
+    private float waterStrideRemaining;
+    private float dragonPressureCooldown;
+    private float dragonPressureWindowRemaining;
+    private int dragonPressureDamage;
+    private float aureliaAegisRemaining;
+    private float aureliaControlImmunityRemaining;
+    private float voidPressureRemaining;
+    private float voidControlImmunityRemaining;
+    private float voidTauntReductionRemaining;
+    private float voidAscensionRemaining;
+    private float voidDecayTickRemaining;
+    private float voidRebirthCooldown;
+    private float voidCollapseRemaining;
+    private float voidCollapseTickRemaining;
+    private float voidParasiteRemaining;
+    private float voidResonanceDamage;
+    private float baseAttackRange;
     private float engagementOffset;
     private int currentHealth;
+    private int baseMaxHealth;
+    private int voidCollapseHealth;
+    private int voidResonanceStacks;
     private int basicSkillLevel = 1;
     private int passiveSkillLevel = 1;
     private int activeSkillLevel = 1;
     private int ultimateSkillLevel = 1;
     private int basicAttackCount;
     private int incomingHitCount;
-    private bool sanctuaryTriggered;
     private bool lastBastionTriggered;
     private bool furyTriggered;
     private bool isMoving;
@@ -1314,6 +1347,8 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private PrototypeCombatant guardLinkTarget;
     private PrototypeCombatant burnSource;
     private PrototypeCombatant poisonSource;
+    private PrototypeCombatant aureliaAegisSource;
+    private PrototypeCombatant voidParasiteSource;
     private readonly Dictionary<PrototypeCombatant, AshState> ashBySource =
         new Dictionary<PrototypeCombatant, AshState>();
     private readonly List<PrototypeCombatant> ashSources = new List<PrototypeCombatant>();
@@ -1341,7 +1376,10 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     internal bool HasShield => currentShield > 0;
     public int HeatStacks => heatStacks;
     public float FireDamageMultiplier => 1f + heatStacks * 0.05f;
-    public float MovementSpeedMultiplier => 1f + heatStacks * 0.04f;
+    public float MovementSpeedMultiplier =>
+        (1f + heatStacks * 0.04f) *
+        (waterStrideRemaining > 0f ? 1.15f : 1f) *
+        (HasAureliaAegis ? 1.2f : 1f);
     public float FireResistance
     {
         get
@@ -1401,7 +1439,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 case PrototypeSkillKit.Ion:
                     return "Basic: every 4th hit chains lightning.\nPassive: every 5th incoming hit is phased and grants energy.\nActive: Static Field damages, stuns and chains.\nUltimate: Volt Rush strikes three times and retargets after kills.";
                 case PrototypeSkillKit.Astra:
-                    return "Basic: every 3rd hit heals the weakest ally.\nPassive: Sanctuary shields an ally below 30% HP once.\nActive: Star Ward heals and shields the weakest ally.\nUltimate: Astral Renewal heals the team and strongly protects one ally.";
+                    return "Basic: each water-serpent attack creates two Hydro Beads that restore energy or empower Aurelia.\nPassives: support effects cleanse, nearby allies gain resistance, and burst damage triggers Dragon Pressure.\nActive: Dragon Realm heals and protects allies while absorbing Hydro Beads.\nUltimate: Draconian Aegis shields and empowers the whole team.";
                 case PrototypeSkillKit.Krag:
                     return "Basic: attacks from the front row.\nPassive: +50% defense above 50% HP; Last Bastion shield below 35%.\nActive: Crushing Orbit damages, weakens attack and shields Krag.\nUltimate: Gravity Bulwark shields Krag and taunts the enemy team.";
                 case PrototypeSkillKit.Vex:
@@ -1411,7 +1449,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 case PrototypeSkillKit.Lyra:
                     return "Basic: every 4th shot hits a second target.\nPassive: long-range back-row positioning.\nActive: Sunpiercer deals damage and burns.\nUltimate: Helios Rain damages and burns the full enemy team.";
                 case PrototypeSkillKit.Brakk:
-                    return "Basic: every 4th attack grants a self shield.\nPassive: front-row Tanker blocks access to allies.\nActive: Guard Link shields and empowers the weakest ally.\nUltimate: Stoneheart Pact shields the entire team.";
+                    return "Basic: Void Claw infects enemies and releases a slowing shockwave at ten Resonance.\nPassives: damage hardens Kronos, parasites steal shield energy, and fatal damage triggers Black Hole Collapse.\nActive: Singularity Pull drags and taunts nearby enemies.\nUltimate: Cosmic Leviathan transforms Kronos into a larger cleaving drain-tank with a decay aura.";
                 case PrototypeSkillKit.Hex:
                     return "Basic: every 3rd attack splashes to a second target.\nPassive: poison deals damage over time.\nActive: Corruption Code poisons and reduces attack.\nUltimate: Singularity Mine deals heavy damage, poison and slow.";
                 case PrototypeSkillKit.Nyx:
@@ -1469,8 +1507,10 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             definition.Defense * statMultiplier * (isBoss ? 1.2f : 1f) * defenseProgression);
         MoveSpeed = definition.MoveSpeed;
         AttackRange = definition.AttackRange;
+        baseAttackRange = AttackRange;
         AttackInterval = definition.AttackInterval;
         currentHealth = MaxHealth;
+        baseMaxHealth = MaxHealth;
         attackCooldown = AttackInterval * 0.5f;
         activeSkillCooldown = ActiveSkillInterval * 0.5f;
         bodyColor = definition.BodyColor;
@@ -1499,12 +1539,44 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         CreateHealthBar(sprite);
         CreateSkillVisuals(sprite);
         CreateStatusIcons();
+        if (SkillKit == PrototypeSkillKit.Astra)
+        {
+            dragonAuraVfx = PrototypeWaterVfx.SpawnAttached(
+                "AureliaDragonAura", transform, 0.11f, 2.8f, true, 1);
+        }
 
         Debug.Assert(characterSprites.Attack.Length >= 4 && characterSprites.Skill.Length >= 4 &&
             characterSprites.Ultimate.Length >= 4,
             "Combat actions need enough frames to expose a clear hit frame.");
         Debug.Assert(BasicHitDelay < BasicActionDuration && SkillHitDelay < SkillActionDuration &&
             UltimateHitDelay < UltimateActionDuration, "Action hit frames must occur before actions finish.");
+    }
+
+    internal void OnBattleStarted()
+    {
+        if (SkillKit != PrototypeSkillKit.Brakk || !IsAlive)
+        {
+            return;
+        }
+
+        voidControlImmunityRemaining = 3f;
+        CleanseNegativeStatuses();
+        battle.Announce("KRONOS  ·  EVENT HORIZON");
+        PrototypeVoidVfx.Spawn("KronosDimensionalTear", transform.position, 0.055f, 1.8f, false, 116);
+        PrototypeVoidVfx.Spawn("KronosVoidField", transform.position, 0.08f, 2.2f, false, 42);
+        if (PrototypeGameFlow.HasInstance)
+        {
+            PrototypeGameFlow.Instance.ShowImpact(new Color(0.18f, 0.14f, 0.22f));
+        }
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            if (!enemy.IsAlive)
+            {
+                continue;
+            }
+            enemy.voidPressureRemaining = Mathf.Max(enemy.voidPressureRemaining, 5f);
+            enemy.ApplyMovementSlow(0.15f, 5f);
+        }
     }
 
     internal void SetEngagementOffset(float offset)
@@ -1548,6 +1620,33 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         ashBySource.Clear();
         heatStacks = 0;
         flameShieldCooldown = 0f;
+        waterStrideRemaining = 0f;
+        dragonPressureCooldown = 0f;
+        dragonPressureWindowRemaining = 0f;
+        dragonPressureDamage = 0;
+        voidPressureRemaining = 0f;
+        voidControlImmunityRemaining = 0f;
+        voidTauntReductionRemaining = 0f;
+        DisableVoidAscension();
+        voidDecayTickRemaining = 0f;
+        voidRebirthCooldown = 0f;
+        voidCollapseRemaining = 0f;
+        voidCollapseTickRemaining = 0f;
+        voidCollapseHealth = 0;
+        voidResonanceStacks = 0;
+        voidResonanceDamage = 0f;
+        ClearVoidParasite();
+        if (voidMassVfx != null)
+        {
+            Destroy(voidMassVfx.gameObject);
+            voidMassVfx = null;
+        }
+        if (voidCollapseVfx != null)
+        {
+            Destroy(voidCollapseVfx.gameObject);
+            voidCollapseVfx = null;
+        }
+        DisableAureliaAegis();
         fireDotMarkerRemaining = 0f;
         forcedTarget = null;
         guardLinkTarget = null;
@@ -1555,12 +1654,13 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         Target = null;
         basicAttackCount = 0;
         incomingHitCount = 0;
-        sanctuaryTriggered = false;
         lastBastionTriggered = false;
         furyTriggered = false;
         CleanseNegativeStatuses();
         DisableShield();
         PrototypeFireZone.DestroyOwnedBy(this);
+        PrototypeHydroBead.DestroyOwnedBy(this);
+        PrototypeWaterDomain.DestroyOwnedBy(this);
         markVisual.enabled = false;
         burnVisual.enabled = false;
         if (heatAura != null) heatAura.enabled = false;
@@ -1584,7 +1684,11 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             return;
         }
 
-        CheckAstraSanctuary();
+        if (voidCollapseRemaining > 0f)
+        {
+            UpdateFeedback();
+            return;
+        }
 
         if (stunRemaining > 0f || airborneRemaining > 0f)
         {
@@ -1669,6 +1773,17 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                     0.75f,
                     112);
             }
+            else if (SkillKit == PrototypeSkillKit.Astra)
+            {
+                PrototypeWaterVfx.SpawnTravel(
+                    "AureliaWaterSerpent",
+                    transform.position + Vector3.up * 0.12f,
+                    Target.transform.position,
+                    hitDelay,
+                    0.8f,
+                    112,
+                    0.18f);
+            }
             else
             {
                 PrototypeProjectile.Spawn(
@@ -1702,6 +1817,12 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             abilityPowerMultiplier = 1f;
             return;
         }
+        if (SkillKit == PrototypeSkillKit.Brakk)
+        {
+            PerformKronosBasic();
+            abilityPowerMultiplier = 1f;
+            return;
+        }
         var defenseIgnore = SkillKit == PrototypeSkillKit.Rook && basicAttackCount % 3 == 0 ? 0.5f : 0f;
         DealDamage(Target, SkillPower(skills == null ? null : skills.Basic, 1f), defenseIgnore);
         var basicEnergy = skills != null && skills.Basic != null && skills.Basic.EnergyGain > 0
@@ -1714,14 +1835,11 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             case PrototypeSkillKit.Ion when basicAttackCount % 4 == 0:
                 TriggerArcChain();
                 break;
-            case PrototypeSkillKit.Astra when basicAttackCount % 3 == 0:
-                TriggerGuidingLight();
+            case PrototypeSkillKit.Astra:
+                SpawnHydroBeads();
                 break;
             case PrototypeSkillKit.Lyra when basicAttackCount % 4 == 0:
                 HitSecondaryTarget(0.75f);
-                break;
-            case PrototypeSkillKit.Brakk when basicAttackCount % 4 == 0:
-                GrantShield(Mathf.RoundToInt(MaxHealth * 0.12f), 4f);
                 break;
             case PrototypeSkillKit.Hex when basicAttackCount % 3 == 0:
                 HitSecondaryTarget(0.5f);
@@ -1745,6 +1863,62 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }
 
         abilityPowerMultiplier = 1f;
+    }
+
+    private void PerformKronosBasic()
+    {
+        var basicPower = SkillPower(skills == null ? null : skills.Basic, 1f);
+        var totalDamage = 0;
+        if (voidAscensionRemaining > 0f)
+        {
+            var origin = transform.position;
+            var direction = (Target.transform.position - origin).normalized;
+            foreach (var enemy in battle.GetOpponents(Team))
+            {
+                if (!enemy.IsAlive || !PrototypeFireCombat.PointInCone(
+                        enemy.transform.position, origin, direction, AttackRange + 1.5f, 52f))
+                {
+                    continue;
+                }
+                totalDamage += DealDamage(enemy, basicPower, PrototypeDamageType.Magic).AppliedDamage;
+            }
+            Heal(Mathf.RoundToInt(totalDamage * 0.3f));
+            PrototypeVoidVfx.Spawn("KronosVoidSlash", transform.position, 0.055f, 1.45f, false, 114);
+        }
+        else
+        {
+            totalDamage = DealDamage(Target, basicPower, PrototypeDamageType.Magic).AppliedDamage;
+        }
+
+        var basicEnergy = skills != null && skills.Basic != null && skills.Basic.EnergyGain > 0
+            ? skills.Basic.EnergyGain
+            : 18f;
+        GainEnergy(basicEnergy);
+        if (voidResonanceStacks < 10)
+        {
+            return;
+        }
+
+        voidResonanceStacks = 0;
+        voidResonanceDamage = 0f;
+        RefreshVoidMassVisual();
+        PrototypeVoidVfx.Spawn("KronosResonanceBurst", transform.position, 0.055f, 1.75f, false, 115);
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            if (!enemy.IsAlive || !PrototypeFireCombat.PointInCircle(enemy.transform.position, transform.position, 2.6f))
+            {
+                continue;
+            }
+            DealFlatDamage(
+                enemy,
+                Mathf.RoundToInt(MaxHealth * 0.06f * BasicSkillMultiplier),
+                PrototypeDamageType.Magic,
+                PrototypeDamageFlags.Direct);
+            if (enemy.IsAlive)
+            {
+                enemy.ApplyMovementSlow(0.4f, 2f);
+            }
+        }
     }
 
     private void PerformFireGodBasic()
@@ -1853,14 +2027,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 HitSecondaryTarget(0.45f, true);
                 break;
             case PrototypeSkillKit.Astra:
-                battle.Announce("ASTRA  ·  STAR WARD");
-                var wounded = battle.FindLowestHealth(battle.GetTeam(Team));
-                if (wounded != null)
-                {
-                    wounded.HealAndReinforce(Mathf.RoundToInt(EffectiveAttack * 0.8f));
-                    wounded.GrantShield(Mathf.RoundToInt(wounded.MaxHealth * 0.15f), 5f);
-                    PrototypeEffect.SpawnBarrier(prototypeSprite, wounded.transform.position, SkillAccent, 0.5f);
-                }
+                CastDragonRealm();
                 break;
             case PrototypeSkillKit.Krag:
                 battle.Announce("KRAG  ·  CRUSHING ORBIT");
@@ -1885,22 +2052,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 Target.ApplyBurn(this, Mathf.RoundToInt(EffectiveAttack * 0.25f), 4f);
                 break;
             case PrototypeSkillKit.Brakk:
-                battle.Announce("BRAKK  ·  GUARD LINK");
-                var guarded = battle.FindLowestHealth(battle.GetTeam(Team));
-                if (guarded != null)
-                {
-                    guarded.GrantShield(Mathf.RoundToInt(guarded.MaxHealth * 0.25f), 5f);
-                    guarded.ApplyAttackBuff(4f);
-                    guardLinkTarget = guarded;
-                    guardLinkRemaining = 5f;
-                    PrototypeEffect.SpawnLine(
-                        prototypeSprite,
-                        transform.position,
-                        guarded.transform.position,
-                        SkillAccent,
-                        0.34f,
-                        0.08f);
-                }
+                CastSingularityPull();
                 break;
             case PrototypeSkillKit.Hex:
                 battle.Announce("HEX  ·  CORRUPTION CODE");
@@ -1971,7 +2123,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 CastVoltRush();
                 break;
             case PrototypeSkillKit.Astra:
-                CastAstralRenewal();
+                CastDraconianAegis();
                 break;
             case PrototypeSkillKit.Krag:
                 CastGravityBulwark();
@@ -1986,7 +2138,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 CastHeliosRain();
                 break;
             case PrototypeSkillKit.Brakk:
-                CastStoneheartPact();
+                CastCosmicLeviathan();
                 break;
             case PrototypeSkillKit.Hex:
                 CastSingularityMine();
@@ -2161,25 +2313,29 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }));
     }
 
-    private void CastAstralRenewal()
+    private void CastDragonRealm()
     {
-        battle.Announce("ASTRA  ·  ASTRAL RENEWAL");
-        var allies = battle.GetTeam(Team);
-        var primary = battle.FindLowestHealth(allies);
+        battle.Announce("AURELIA  ·  LONG MACH TRAN");
+        PrototypeWaterDomain.Spawn(this, battle, transform.position, 6f);
+        PrototypeWaterVfx.Spawn("AureliaCleansingRing", transform.position, 0.055f, 1.8f, false, 113);
+    }
 
-        foreach (var ally in allies)
+    private void CastDraconianAegis()
+    {
+        battle.Announce("AURELIA  ·  VAN LY LONG BICH");
+        PrototypeWaterVfx.Spawn("AureliaUltimateDragon", transform.position, 0.065f, 2.15f, false, 112);
+        var shield = Mathf.RoundToInt(MaxHealth * 0.35f * UltimateSkillMultiplier);
+        foreach (var ally in battle.GetTeam(Team))
         {
-            if (ally.IsAlive)
+            if (!ally.IsAlive)
             {
-                ally.HealAndReinforce(Mathf.RoundToInt(EffectiveAttack * 0.35f));
+                continue;
             }
-        }
 
-        if (primary != null)
-        {
-            primary.HealAndReinforce(EffectiveAttack);
-            primary.GrantShield(Mathf.RoundToInt(primary.MaxHealth * 0.2f), 5f);
-            PrototypeEffect.SpawnBarrier(prototypeSprite, primary.transform.position, SkillAccent, 0.65f);
+            ally.GrantAureliaAegis(this, shield);
+            ApplyAureliaSupport(ally, 0, 0, 0f);
+            PrototypeWaterVfx.Spawn(
+                "AureliaBlessingImpact", ally.transform.position, 0.055f, 1.1f, false, 115);
         }
     }
 
@@ -2283,19 +2439,53 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }
     }
 
-    private void CastStoneheartPact()
+    private void CastSingularityPull()
     {
-        battle.Announce("BRAKK  ·  STONEHEART PACT");
-        foreach (var ally in battle.GetTeam(Team))
+        battle.Announce("KRONOS  ·  SINGULARITY PULL");
+        var empowered = voidAscensionRemaining > 0f;
+        var radius = empowered ? 9f : 6f;
+        var tauntDuration = empowered ? 2.5f : 2f;
+        voidTauntReductionRemaining = Mathf.Max(voidTauntReductionRemaining, tauntDuration);
+        PrototypeVoidVfx.Spawn("KronosSingularity", transform.position, 0.065f, empowered ? 2.5f : 2f, false, 45);
+        foreach (var enemy in battle.GetOpponents(Team))
         {
-            if (ally.IsAlive)
+            if (!enemy.IsAlive)
             {
-                ally.GrantShield(Mathf.RoundToInt(ally.MaxHealth * 0.2f), 6f);
-                PrototypeEffect.SpawnBarrier(prototypeSprite, ally.transform.position, SkillAccent, 0.45f);
+                continue;
             }
+            var delta = transform.position - enemy.transform.position;
+            var distance = delta.magnitude;
+            if (distance > radius)
+            {
+                continue;
+            }
+            enemy.ApplyKnockback(delta, Mathf.Max(0f, distance - 0.9f));
+            enemy.ApplyTaunt(this, tauntDuration);
+            enemy.ApplyVoidParasite(this);
         }
+    }
 
-        PrototypeEffect.Spawn(prototypeSprite, transform.position, bodyColor, 0.8f, 2.2f, 0.5f);
+    private void CastCosmicLeviathan()
+    {
+        battle.Announce("KRONOS  ·  COSMIC LEVIATHAN");
+        if (voidAscensionRemaining <= 0f)
+        {
+            var bonusHealth = Mathf.RoundToInt(baseMaxHealth * 0.4f);
+            MaxHealth = baseMaxHealth + bonusHealth;
+            currentHealth = Mathf.Min(MaxHealth, currentHealth + bonusHealth);
+            AttackRange = baseAttackRange * 1.2f;
+            body.transform.localScale = Vector3.one * bodySize * 2f;
+            UpdateHealthBar();
+        }
+        voidAscensionRemaining = 10f;
+        voidDecayTickRemaining = 0f;
+        PrototypeVoidVfx.Spawn("KronosLeviathanAwaken", transform.position, 0.065f, 2.4f, false, 44);
+        if (voidAscensionVfx != null)
+        {
+            Destroy(voidAscensionVfx.gameObject);
+        }
+        voidAscensionVfx = PrototypeVoidVfx.SpawnAttached(
+            "KronosLeviathanAura", transform, 0.08f, 2.5f, true, 1);
     }
 
     private void CastSingularityMine()
@@ -2436,33 +2626,103 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         return best;
     }
 
-    private void TriggerGuidingLight()
+    private void SpawnHydroBeads()
+    {
+        var candidates = new List<PrototypeCombatant>();
+        foreach (var ally in battle.GetTeam(Team))
+        {
+            if (ally.IsAlive)
+            {
+                candidates.Add(ally);
+            }
+        }
+
+        for (var count = Mathf.Min(2, candidates.Count); count > 0; count--)
+        {
+            var index = UnityEngine.Random.Range(0, candidates.Count);
+            PrototypeHydroBead.Spawn(this, candidates[index]);
+            candidates.RemoveAt(index);
+        }
+    }
+
+    internal void ResolveHydroBead(PrototypeCombatant recipient)
+    {
+        if (recipient == null || !recipient.IsAlive || recipient.Team != Team)
+        {
+            return;
+        }
+
+        if (recipient == this)
+        {
+            waterStrideRemaining = Mathf.Max(waterStrideRemaining, 3f);
+            activeSkillCooldown = Mathf.Max(0f, activeSkillCooldown - 1f);
+            PrototypeWaterVfx.Spawn(
+                "AureliaCleansingRing", transform.position, 0.055f, 0.75f, false, 113);
+            return;
+        }
+
+        recipient.GainEnergy(3f);
+        ApplyAureliaSupport(recipient, 0, Mathf.RoundToInt(MaxHealth * 0.06f), 4f);
+    }
+
+    internal void TickWaterDomain(PrototypeWaterDomain domain)
+    {
+        var heal = Mathf.Max(1, Mathf.RoundToInt(MaxHealth * 0.02f * ActiveSkillMultiplier));
+        foreach (var ally in battle.GetTeam(Team))
+        {
+            if (domain.Contains(ally))
+            {
+                ApplyAureliaSupport(ally, heal, 0, 0f);
+            }
+        }
+    }
+
+    internal void BurstWaterDomain()
+    {
+        var heal = Mathf.Max(1, Mathf.RoundToInt(MaxHealth * 0.04f * ActiveSkillMultiplier));
+        foreach (var ally in battle.GetTeam(Team))
+        {
+            if (ally.IsAlive)
+            {
+                ApplyAureliaSupport(ally, heal, 0, 0f);
+            }
+        }
+    }
+
+    internal void HealLowestAlly(int amount)
     {
         var ally = battle.FindLowestHealth(battle.GetTeam(Team));
         if (ally != null)
         {
-            ally.HealAndReinforce(Mathf.RoundToInt(EffectiveAttack * 0.45f));
-            PrototypeEffect.Spawn(prototypeSprite, ally.transform.position, SkillAccent, 0.25f, 1f, 0.3f);
+            ApplyAureliaSupport(ally, amount, 0, 0f);
         }
     }
 
-    private void CheckAstraSanctuary()
+    private void ApplyAureliaSupport(PrototypeCombatant recipient, int heal, int shield, float shieldDuration)
     {
-        if (SkillKit != PrototypeSkillKit.Astra || sanctuaryTriggered)
+        if (recipient == null || !recipient.IsAlive || recipient.Team != Team)
         {
             return;
         }
 
-        var ally = battle.FindLowestHealth(battle.GetTeam(Team));
-        if (ally == null || ally.CurrentHealth > ally.MaxHealth * 0.3f)
+        var multiplier = recipient.IsHardControlled ? 1.3f : 1f;
+        if (heal > 0)
         {
-            return;
+            recipient.Heal(Mathf.RoundToInt(heal * multiplier));
         }
-
-        sanctuaryTriggered = true;
-        ally.GrantShield(Mathf.RoundToInt(MaxHealth * 0.25f), 6f);
-        battle.Announce("ASTRA  ·  SANCTUARY");
-        PrototypeEffect.Spawn(prototypeSprite, ally.transform.position, bodyColor, 0.8f, 1.7f, 0.4f);
+        if (shield > 0)
+        {
+            recipient.GrantShield(Mathf.RoundToInt(shield * multiplier), shieldDuration);
+        }
+        foreach (var ally in battle.GetTeam(Team))
+        {
+            if (ally.IsAlive && (ally.transform.position - recipient.transform.position).sqrMagnitude <= 9f)
+            {
+                ally.CleanseOneNegativeStatus();
+            }
+        }
+        PrototypeWaterVfx.Spawn(
+            "AureliaCleansingRing", recipient.transform.position, 0.055f, 0.9f, false, 113);
     }
 
     private void TriggerMomentum()
@@ -2479,6 +2739,10 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             return 0;
         }
 
+        if (HasVoidParasite)
+        {
+            amount = Mathf.Max(1, Mathf.RoundToInt(amount * 0.85f));
+        }
         var previous = currentHealth;
         currentHealth = Mathf.Min(MaxHealth, currentHealth + amount);
         UpdateHealthBar();
@@ -2523,41 +2787,119 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             return;
         }
 
+        if (HasVoidParasite)
+        {
+            amount = Mathf.Max(1, Mathf.RoundToInt(amount * 0.85f));
+        }
         currentShield = Mathf.Max(currentShield, amount);
         shieldRemaining = Mathf.Max(shieldRemaining, duration);
         shieldVisual.enabled = true;
     }
 
+    private void AddTemporaryShield(int amount, float duration)
+    {
+        if (!IsAlive || amount <= 0)
+        {
+            return;
+        }
+
+        var cap = Mathf.RoundToInt(MaxHealth * 0.6f);
+        currentShield = Mathf.Min(cap, currentShield + amount);
+        shieldRemaining = Mathf.Max(shieldRemaining, duration);
+        shieldVisual.enabled = currentShield > 0;
+    }
+
+    private void ApplyVoidParasite(PrototypeCombatant source)
+    {
+        if (!IsAlive || source == null || !source.IsAlive)
+        {
+            return;
+        }
+
+        voidParasiteSource = source;
+        voidParasiteRemaining = 4f;
+        if (voidParasiteVfx == null)
+        {
+            voidParasiteVfx = PrototypeVoidVfx.SpawnAttached(
+                "KronosParasite", transform, 0.08f, 1.25f, true, 108);
+        }
+    }
+
+    private void ClearVoidParasite()
+    {
+        voidParasiteRemaining = 0f;
+        voidParasiteSource = null;
+        if (voidParasiteVfx != null)
+        {
+            Destroy(voidParasiteVfx.gameObject);
+            voidParasiteVfx = null;
+        }
+    }
+
+    private void GrantAureliaAegis(PrototypeCombatant source, int amount)
+    {
+        GrantShield(amount, 8f);
+        aureliaAegisSource = source;
+        aureliaAegisRemaining = 8f;
+        aureliaControlImmunityRemaining = 2f;
+        if (aureliaShieldVfx != null)
+        {
+            Destroy(aureliaShieldVfx.gameObject);
+        }
+        aureliaShieldVfx = PrototypeWaterVfx.SpawnAttached(
+            "AureliaShieldLoop", transform, 0.09f, 2.6f, true, 113);
+    }
+
     private void ApplyTaunt(PrototypeCombatant source, float duration)
     {
+        if (HasControlImmunity)
+        {
+            return;
+        }
         forcedTarget = source;
-        tauntRemaining = duration;
+        tauntRemaining = AdjustNegativeDuration(duration);
         Target = source;
     }
 
     private void ApplyAttackSlow(float duration)
     {
-        slowRemaining = Mathf.Max(slowRemaining, duration);
+        if (HasNegativeStatusImmunity)
+        {
+            return;
+        }
+        slowRemaining = Mathf.Max(slowRemaining, AdjustNegativeDuration(duration));
     }
 
     internal void ApplyMovementSlow(float percent, float duration)
     {
+        if (HasNegativeStatusImmunity)
+        {
+            return;
+        }
         if (percent >= movementSlowPercent || movementSlowRemaining <= 0f)
         {
             movementSlowPercent = Mathf.Clamp01(percent);
         }
-        movementSlowRemaining = Mathf.Max(movementSlowRemaining, duration);
+        movementSlowRemaining = Mathf.Max(movementSlowRemaining, AdjustNegativeDuration(duration));
     }
 
     internal void ApplyDecayingSlow(float percent, float duration)
     {
+        if (HasNegativeStatusImmunity)
+        {
+            return;
+        }
         decayingSlowStart = Mathf.Max(decayingSlowStart, Mathf.Clamp01(percent));
-        decayingSlowDuration = Mathf.Max(decayingSlowDuration, duration);
+        decayingSlowDuration = Mathf.Max(decayingSlowDuration, AdjustNegativeDuration(duration));
         decayingSlowElapsed = 0f;
     }
 
     internal void ApplyKnockback(Vector3 direction, float distance)
     {
+        if (HasControlImmunity)
+        {
+            return;
+        }
         direction.z = 0f;
         if (direction.sqrMagnitude <= 0.0001f || distance <= 0f)
         {
@@ -2566,13 +2908,17 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
         knockbackStart = transform.position;
         knockbackEnd = ClampToArena(knockbackStart + direction.normalized * distance);
-        knockbackDuration = 0.18f;
+        knockbackDuration = AdjustNegativeDuration(0.18f);
         knockbackRemaining = knockbackDuration;
     }
 
     internal void ApplyKnockUp(float duration)
     {
-        airborneDuration = Mathf.Max(0.05f, duration);
+        if (HasControlImmunity)
+        {
+            return;
+        }
+        airborneDuration = Mathf.Max(0.05f, AdjustNegativeDuration(duration));
         airborneRemaining = airborneDuration;
         pendingAction = null;
         actionHitRemaining = 0f;
@@ -2583,7 +2929,11 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     internal void ApplyGrounded(float duration)
     {
-        groundedRemaining = Mathf.Max(groundedRemaining, duration);
+        if (HasNegativeStatusImmunity)
+        {
+            return;
+        }
+        groundedRemaining = Mathf.Max(groundedRemaining, AdjustNegativeDuration(duration));
     }
 
     private bool TryVoluntaryDisplacement(Vector3 destination)
@@ -2604,11 +2954,18 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private void ApplyStun(float duration)
     {
-        stunRemaining = Mathf.Max(stunRemaining, duration);
+        if (!HasControlImmunity)
+        {
+            stunRemaining = Mathf.Max(stunRemaining, AdjustNegativeDuration(duration));
+        }
     }
 
     private void ApplyBurn(PrototypeCombatant source, int damage, float duration, float tickInterval = 1f)
     {
+        if (HasNegativeStatusImmunity)
+        {
+            return;
+        }
         var interval = Mathf.Max(0.05f, tickInterval);
         var candidateTotal = PrototypeFireCombat.RemainingDotDamage(damage, duration, interval);
         var currentTotal = PrototypeFireCombat.RemainingDotDamage(
@@ -2619,7 +2976,7 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             burnDamageType = PrototypeDamageType.Fire;
             burnTickDamage = Mathf.Max(1, damage);
             burnTickInterval = interval;
-            burnRemaining = Mathf.Max(0f, duration);
+            burnRemaining = Mathf.Max(0f, AdjustNegativeDuration(duration));
         }
         burnTickCooldown = Mathf.Min(
             burnTickCooldown <= 0f ? interval : burnTickCooldown,
@@ -2639,9 +2996,13 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private void ApplyPoison(PrototypeCombatant source, int damage, float duration)
     {
+        if (HasNegativeStatusImmunity)
+        {
+            return;
+        }
         poisonSource = source;
         poisonDamage = Mathf.Max(poisonDamage, damage);
-        poisonRemaining = Mathf.Max(poisonRemaining, duration);
+        poisonRemaining = Mathf.Max(poisonRemaining, AdjustNegativeDuration(duration));
         poisonTickCooldown = Mathf.Min(poisonTickCooldown <= 0f ? 1f : poisonTickCooldown, 1f);
     }
 
@@ -2652,7 +3013,67 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private void ApplyAttackDebuff(float duration)
     {
-        attackDebuffRemaining = Mathf.Max(attackDebuffRemaining, duration);
+        if (HasNegativeStatusImmunity)
+        {
+            return;
+        }
+        attackDebuffRemaining = Mathf.Max(attackDebuffRemaining, AdjustNegativeDuration(duration));
+    }
+
+    private bool IsHardControlled =>
+        stunRemaining > 0f || airborneRemaining > 0f || knockbackRemaining > 0f || tauntRemaining > 0f;
+
+    private bool HasControlImmunity =>
+        voidControlImmunityRemaining > 0f || aureliaControlImmunityRemaining > 0f && currentShield > 0;
+
+    private bool HasNegativeStatusImmunity => voidControlImmunityRemaining > 0f;
+
+    private bool HasVoidParasite => voidParasiteRemaining > 0f && voidParasiteSource != null;
+
+    private bool HasAureliaAegis => aureliaAegisRemaining > 0f && currentShield > 0;
+
+    private float AdjustNegativeDuration(float duration)
+    {
+        return FindAureliaAuraSource() == null ? duration : duration * 0.9f;
+    }
+
+    private PrototypeCombatant FindAureliaAuraSource()
+    {
+        if (battle == null)
+        {
+            return null;
+        }
+
+        foreach (var ally in battle.GetTeam(Team))
+        {
+            if (ally != null && ally.IsAlive && ally.SkillKit == PrototypeSkillKit.Astra &&
+                (ally.transform.position - transform.position).sqrMagnitude <= 64f)
+            {
+                return ally;
+            }
+        }
+        return null;
+    }
+
+    private PrototypeWaterDomain FindAureliaDomain()
+    {
+        if (battle == null)
+        {
+            return null;
+        }
+
+        foreach (var ally in battle.GetTeam(Team))
+        {
+            if (ally != null && ally.SkillKit == PrototypeSkillKit.Astra)
+            {
+                var domain = PrototypeWaterDomain.FindFor(ally);
+                if (domain != null && domain.Contains(this))
+                {
+                    return domain;
+                }
+            }
+        }
+        return null;
     }
 
     private void CleanseNegativeStatuses()
@@ -2680,6 +3101,65 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         attackDebuffRemaining = 0f;
     }
 
+    private bool CleanseOneNegativeStatus()
+    {
+        var statuses = new List<int>();
+        if (stunRemaining > 0f || airborneRemaining > 0f || knockbackRemaining > 0f) statuses.Add(0);
+        if (slowRemaining > 0f || movementSlowRemaining > 0f || decayingSlowDuration > 0f) statuses.Add(1);
+        if (groundedRemaining > 0f) statuses.Add(2);
+        if (burnRemaining > 0f || fireDotMarkerRemaining > 0f) statuses.Add(3);
+        if (poisonRemaining > 0f) statuses.Add(4);
+        if (attackDebuffRemaining > 0f) statuses.Add(5);
+        if (tauntRemaining > 0f) statuses.Add(6);
+        if (statuses.Count == 0)
+        {
+            return false;
+        }
+
+        switch (statuses[UnityEngine.Random.Range(0, statuses.Count)])
+        {
+            case 0:
+                stunRemaining = 0f;
+                airborneRemaining = 0f;
+                knockbackRemaining = 0f;
+                break;
+            case 1:
+                slowRemaining = 0f;
+                movementSlowPercent = 0f;
+                movementSlowRemaining = 0f;
+                decayingSlowStart = 0f;
+                decayingSlowDuration = 0f;
+                decayingSlowElapsed = 0f;
+                break;
+            case 2:
+                groundedRemaining = 0f;
+                break;
+            case 3:
+                burnRemaining = 0f;
+                burnTickCooldown = 0f;
+                burnTickDamage = 0;
+                burnSource = null;
+                fireDotMarkerRemaining = 0f;
+                burnVisual.enabled = false;
+                break;
+            case 4:
+                poisonRemaining = 0f;
+                poisonTickCooldown = 0f;
+                poisonDamage = 0;
+                poisonSource = null;
+                break;
+            case 5:
+                attackDebuffRemaining = 0f;
+                break;
+            default:
+                tauntRemaining = 0f;
+                forcedTarget = null;
+                Target = null;
+                break;
+        }
+        return true;
+    }
+
     private void DrainEnergy(float amount)
     {
         energy = Mathf.Max(0f, energy - amount);
@@ -2705,6 +3185,10 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         if (SkillKit == PrototypeSkillKit.Nova && damageType == PrototypeDamageType.Fire)
         {
             multiplier *= FireDamageMultiplier;
+        }
+        if (HasAureliaAegis)
+        {
+            multiplier *= 1.25f;
         }
 
         var calculated = PrototypeFireCombat.CalculateDamage(
@@ -2755,11 +3239,16 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             return new PrototypeDamageResult(0, false, false);
         }
 
+        if (voidPressureRemaining > 0f)
+        {
+            calculatedDamage = Mathf.Max(1, Mathf.RoundToInt(calculatedDamage * 0.9f));
+        }
         var targetWasBurning = target.HasBurn;
         var wasAlive = target.IsAlive;
-        var appliedDamage = target.TakeDamage(
+        var appliedDamage = target.TakeDamageFrom(
             calculatedDamage,
-            (flags & PrototypeDamageFlags.Direct) != 0);
+            (flags & PrototypeDamageFlags.Direct) != 0,
+            this);
         DamageDealt += appliedDamage;
         if (appliedDamage > 0)
         {
@@ -2789,13 +3278,21 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             AddHeat(1);
             GainEnergy(2f);
         }
+        if (appliedDamage > 0 && target.IsAlive && SkillKit == PrototypeSkillKit.Brakk &&
+            (flags & PrototypeDamageFlags.Direct) != 0)
+        {
+            target.ApplyVoidParasite(this);
+        }
 
         return new PrototypeDamageResult(appliedDamage, killed, targetWasBurning);
     }
 
     private void DealStatusDamage(PrototypeCombatant target, int damage)
     {
-        DamageDealt += target.TakeDamage(damage, false);
+        var scaledDamage = voidPressureRemaining > 0f
+            ? Mathf.Max(1, Mathf.RoundToInt(damage * 0.9f))
+            : damage;
+        DamageDealt += target.TakeDamageFrom(scaledDamage, false, this);
     }
 
     internal static float CombatStoppingDistance(float attackRange, float attackerBodySize, float targetBodySize)
@@ -2867,7 +3364,12 @@ internal sealed class PrototypeCombatant : MonoBehaviour
 
     private int TakeDamage(int damage, bool triggersOnHit = true)
     {
-        if (!IsAlive)
+        return TakeDamageFrom(damage, triggersOnHit, null);
+    }
+
+    private int TakeDamageFrom(int damage, bool triggersOnHit, PrototypeCombatant source)
+    {
+        if (!IsAlive || voidCollapseRemaining > 0f)
         {
             return 0;
         }
@@ -2885,6 +3387,19 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }
 
         var remainingDamage = damage;
+        if (voidTauntReductionRemaining > 0f)
+        {
+            remainingDamage = Mathf.Max(1, Mathf.RoundToInt(remainingDamage * 0.7f));
+        }
+        if (FindAureliaAuraSource() != null)
+        {
+            remainingDamage = Mathf.Max(1, Mathf.RoundToInt(remainingDamage * 0.92f));
+        }
+        var domain = FindAureliaDomain();
+        if (domain != null)
+        {
+            remainingDamage = domain.ReduceDamage(this, remainingDamage);
+        }
         var absorbed = 0;
         if (currentShield > 0)
         {
@@ -2893,13 +3408,21 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             remainingDamage -= absorbed;
             if (currentShield <= 0)
             {
-                DisableShield();
+                DisableShield(true);
             }
         }
 
         var previousHealth = currentHealth;
         var minimumHealth = battle.IsIdleFarmMode && Team == PrototypeTeam.Allies ? 1 : 0;
-        currentHealth = Mathf.Max(minimumHealth, currentHealth - remainingDamage);
+        var triggersCollapse = minimumHealth == 0 && SkillKit == PrototypeSkillKit.Brakk &&
+            voidRebirthCooldown <= 0f && remainingDamage >= currentHealth;
+        currentHealth = triggersCollapse
+            ? 1
+            : Mathf.Max(minimumHealth, currentHealth - remainingDamage);
+        if (triggersCollapse)
+        {
+            BeginBlackHoleCollapse();
+        }
         hitFlash = 0.12f;
         UpdateHealthBar();
 
@@ -2939,6 +3462,20 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             guardLinkRemaining = 0f;
             DisableShield();
             PrototypeFireZone.DestroyOwnedBy(this);
+            PrototypeHydroBead.DestroyOwnedBy(this);
+            PrototypeWaterDomain.DestroyOwnedBy(this);
+            DisableVoidAscension();
+            ClearVoidParasite();
+            if (voidMassVfx != null)
+            {
+                Destroy(voidMassVfx.gameObject);
+                voidMassVfx = null;
+            }
+            if (voidCollapseVfx != null)
+            {
+                Destroy(voidCollapseVfx.gameObject);
+                voidCollapseVfx = null;
+            }
             markVisual.enabled = false;
             burnVisual.enabled = false;
             if (heatAura != null) heatAura.enabled = false;
@@ -2951,6 +3488,21 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }
 
         var appliedDamage = absorbed + previousHealth - currentHealth;
+        TrackAureliaBurstDamage(appliedDamage);
+        TrackVoidResonance(appliedDamage);
+        if (appliedDamage > 0 && source != null && source.IsAlive &&
+            source.HasVoidParasite && source.voidParasiteSource == this && IsAlive)
+        {
+            AddTemporaryShield(Mathf.RoundToInt(appliedDamage * 0.2f), 4f);
+            PrototypeVoidVfx.SpawnTravel(
+                "KronosParasiteDrain", source.transform.position, transform.position, 0.22f, 0.85f, 113);
+        }
+        if (appliedDamage > 0 && SkillKit == PrototypeSkillKit.Brakk && voidResonanceStacks > 0 &&
+            source != null && source.IsAlive && source != this)
+        {
+            var reflectRate = voidResonanceStacks * 0.01f * (voidTauntReductionRemaining > 0f ? 2f : 1f);
+            source.TakeDamage(Mathf.Max(1, Mathf.RoundToInt(appliedDamage * reflectRate)), false);
+        }
         if (appliedDamage > 0)
         {
             PrototypeDamageNumber.Spawn(
@@ -2961,10 +3513,225 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         return appliedDamage;
     }
 
-    private int EffectiveDefense =>
-        SkillKit == PrototypeSkillKit.Krag && currentHealth > MaxHealth * 0.5f
-            ? Mathf.RoundToInt(Defense * 1.5f)
-            : Defense;
+    private void TrackAureliaBurstDamage(int damage)
+    {
+        if (SkillKit != PrototypeSkillKit.Astra || !IsAlive || damage <= 0 || dragonPressureCooldown > 0f)
+        {
+            return;
+        }
+
+        if (dragonPressureWindowRemaining <= 0f)
+        {
+            dragonPressureWindowRemaining = 1f;
+            dragonPressureDamage = 0;
+        }
+        dragonPressureDamage += damage;
+        if (dragonPressureDamage <= MaxHealth * 0.3f)
+        {
+            return;
+        }
+
+        dragonPressureCooldown = 60f;
+        dragonPressureWindowRemaining = 0f;
+        dragonPressureDamage = 0;
+        battle.Announce("AURELIA  ·  UY AP LONG VUONG");
+        PrototypeWaterVfx.Spawn("AureliaDragonPressure", transform.position, 0.06f, 1.7f, false, 116);
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            var delta = enemy.transform.position - transform.position;
+            if (enemy.IsAlive && delta.sqrMagnitude <= 2.5f * 2.5f)
+            {
+                enemy.ApplyKnockback(delta.normalized, 3f);
+                enemy.ApplyMovementSlow(0.5f, 2f);
+            }
+        }
+    }
+
+    private void TriggerAureliaShieldBreak(Vector3 center)
+    {
+        if (!IsAlive || battle == null || battle.IsFinished)
+        {
+            return;
+        }
+
+        PrototypeWaterVfx.Spawn("AureliaShieldBreak", center, 0.055f, 1.25f, false, 116);
+        foreach (var enemy in battle.GetOpponents(Team))
+        {
+            if (!enemy.IsAlive || !PrototypeFireCombat.PointInCircle(enemy.transform.position, center, 1.8f))
+            {
+                continue;
+            }
+            DealDamage(enemy, 0.8f, PrototypeDamageType.Magic);
+            if (enemy.IsAlive)
+            {
+                enemy.ApplyMovementSlow(0.4f, 2f);
+            }
+        }
+    }
+
+    private void TrackVoidResonance(int damage)
+    {
+        if (SkillKit != PrototypeSkillKit.Brakk || !IsAlive || damage <= 0 || voidResonanceStacks >= 10)
+        {
+            return;
+        }
+
+        voidResonanceDamage += damage;
+        var threshold = Mathf.Max(1f, MaxHealth * 0.05f);
+        while (voidResonanceDamage >= threshold && voidResonanceStacks < 10)
+        {
+            voidResonanceDamage -= threshold;
+            voidResonanceStacks++;
+        }
+        RefreshVoidMassVisual();
+    }
+
+    private void RefreshVoidMassVisual()
+    {
+        if (voidMassVfx != null)
+        {
+            Destroy(voidMassVfx.gameObject);
+            voidMassVfx = null;
+        }
+        if (voidResonanceStacks <= 0 || !IsAlive)
+        {
+            return;
+        }
+
+        voidMassVfx = PrototypeVoidVfx.SpawnAttached(
+            "KronosMassOrbit", transform, 0.08f, 1.2f + voidResonanceStacks * 0.06f, true, 107);
+    }
+
+    private void BeginBlackHoleCollapse()
+    {
+        voidRebirthCooldown = 120f;
+        voidCollapseRemaining = 2f;
+        voidCollapseTickRemaining = 1f;
+        voidCollapseHealth = 0;
+        pendingAction = null;
+        actionHitRemaining = 0f;
+        attackPulse = 0f;
+        skillPulse = 0f;
+        body.enabled = false;
+        battle.Announce("KRONOS  ·  BLACK HOLE COLLAPSE");
+        voidCollapseVfx = PrototypeVoidVfx.SpawnAttached(
+            "KronosCollapse", transform, 0.06f, 1.8f, true, 116);
+    }
+
+    private void TickBlackHoleCollapse()
+    {
+        if (voidCollapseRemaining <= 0f)
+        {
+            return;
+        }
+
+        voidCollapseRemaining = Mathf.Max(0f, voidCollapseRemaining - Time.deltaTime);
+        voidCollapseTickRemaining -= Time.deltaTime;
+        if (voidCollapseTickRemaining <= 0f)
+        {
+            voidCollapseTickRemaining += 1f;
+            PrototypeVoidVfx.Spawn("KronosDecayPulse", transform.position, 0.055f, 1.7f, false, 114);
+            foreach (var enemy in battle.GetOpponents(Team))
+            {
+                if (!enemy.IsAlive || !PrototypeFireCombat.PointInCircle(
+                        enemy.transform.position, transform.position, 3.2f))
+                {
+                    continue;
+                }
+                var drained = enemy.TakeDamageFrom(Mathf.RoundToInt(enemy.MaxHealth * 0.05f), false, this);
+                voidCollapseHealth += drained;
+                DamageDealt += drained;
+            }
+        }
+
+        if (voidCollapseRemaining > 0f)
+        {
+            return;
+        }
+
+        currentHealth = Mathf.Clamp(voidCollapseHealth, 1, MaxHealth);
+        body.enabled = true;
+        if (voidCollapseVfx != null)
+        {
+            Destroy(voidCollapseVfx.gameObject);
+            voidCollapseVfx = null;
+        }
+        UpdateHealthBar();
+    }
+
+    private void TickVoidAscension()
+    {
+        if (voidAscensionRemaining <= 0f)
+        {
+            return;
+        }
+
+        voidAscensionRemaining = Mathf.Max(0f, voidAscensionRemaining - Time.deltaTime);
+        voidDecayTickRemaining -= Time.deltaTime;
+        if (voidDecayTickRemaining <= 0f)
+        {
+            voidDecayTickRemaining += 1f;
+            PrototypeVoidVfx.Spawn("KronosDecayPulse", transform.position, 0.055f, 1.5f, false, 112);
+            foreach (var enemy in battle.GetOpponents(Team))
+            {
+                if (enemy.IsAlive && PrototypeFireCombat.PointInCircle(
+                        enemy.transform.position, transform.position, 3f))
+                {
+                    DealFlatDamage(
+                        enemy,
+                        Mathf.RoundToInt(MaxHealth * 0.03f),
+                        PrototypeDamageType.Magic,
+                        PrototypeDamageFlags.Direct);
+                }
+            }
+        }
+        if (voidAscensionRemaining <= 0f)
+        {
+            DisableVoidAscension();
+        }
+    }
+
+    private void DisableVoidAscension()
+    {
+        voidAscensionRemaining = 0f;
+        if (baseMaxHealth > 0)
+        {
+            MaxHealth = baseMaxHealth;
+            currentHealth = Mathf.Min(currentHealth, MaxHealth);
+        }
+        if (baseAttackRange > 0f)
+        {
+            AttackRange = baseAttackRange;
+        }
+        if (body != null)
+        {
+            body.transform.localScale = Vector3.one * bodySize;
+        }
+        if (voidAscensionVfx != null)
+        {
+            Destroy(voidAscensionVfx.gameObject);
+            voidAscensionVfx = null;
+        }
+    }
+
+    private int EffectiveDefense
+    {
+        get
+        {
+            var multiplier = SkillKit == PrototypeSkillKit.Krag && currentHealth > MaxHealth * 0.5f
+                ? 1.5f
+                : 1f;
+            if (SkillKit == PrototypeSkillKit.Brakk)
+            {
+                multiplier *= 1f + voidResonanceStacks * 0.02f;
+                if (voidAscensionRemaining > 0f)
+                {
+                    multiplier *= 1.5f;
+                }
+            }
+            return Mathf.RoundToInt(Defense * multiplier);
+        }
+    }
 
     private int EffectiveAttack
     {
@@ -2976,8 +3743,11 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 multiplier *= 0.75f;
             }
 
+            var effectiveAttack = Attack + (SkillKit == PrototypeSkillKit.Brakk
+                ? Mathf.RoundToInt(MaxHealth * 0.015f)
+                : 0);
             return Mathf.RoundToInt(
-                Attack * multiplier * PassiveSkillMultiplier * abilityPowerMultiplier);
+                effectiveAttack * multiplier * PassiveSkillMultiplier * abilityPowerMultiplier);
         }
     }
 
@@ -3178,7 +3948,35 @@ internal sealed class PrototypeCombatant : MonoBehaviour
     private void UpdateStatuses()
     {
         activeSkillCooldown = Mathf.Max(0f, activeSkillCooldown - Time.deltaTime);
+        voidPressureRemaining = Mathf.Max(0f, voidPressureRemaining - Time.deltaTime);
+        voidControlImmunityRemaining = Mathf.Max(0f, voidControlImmunityRemaining - Time.deltaTime);
+        voidTauntReductionRemaining = Mathf.Max(0f, voidTauntReductionRemaining - Time.deltaTime);
+        voidRebirthCooldown = Mathf.Max(0f, voidRebirthCooldown - Time.deltaTime);
+        if (voidParasiteRemaining > 0f)
+        {
+            voidParasiteRemaining = Mathf.Max(0f, voidParasiteRemaining - Time.deltaTime);
+            if (voidParasiteRemaining <= 0f || voidParasiteSource == null || !voidParasiteSource.IsAlive)
+            {
+                ClearVoidParasite();
+            }
+        }
+        TickBlackHoleCollapse();
+        if (voidCollapseRemaining <= 0f)
+        {
+            TickVoidAscension();
+        }
         flameShieldCooldown = Mathf.Max(0f, flameShieldCooldown - Time.deltaTime);
+        waterStrideRemaining = Mathf.Max(0f, waterStrideRemaining - Time.deltaTime);
+        dragonPressureCooldown = Mathf.Max(0f, dragonPressureCooldown - Time.deltaTime);
+        dragonPressureWindowRemaining = Mathf.Max(0f, dragonPressureWindowRemaining - Time.deltaTime);
+        if (dragonPressureWindowRemaining <= 0f) dragonPressureDamage = 0;
+        var hadAureliaAegis = aureliaAegisRemaining > 0f;
+        aureliaAegisRemaining = Mathf.Max(0f, aureliaAegisRemaining - Time.deltaTime);
+        aureliaControlImmunityRemaining = Mathf.Max(0f, aureliaControlImmunityRemaining - Time.deltaTime);
+        if (hadAureliaAegis && aureliaAegisRemaining <= 0f)
+        {
+            DisableAureliaAegis();
+        }
         hasteRemaining = Mathf.Max(0f, hasteRemaining - Time.deltaTime);
         slowRemaining = Mathf.Max(0f, slowRemaining - Time.deltaTime);
         stunRemaining = Mathf.Max(0f, stunRemaining - Time.deltaTime);
@@ -3347,10 +4145,12 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         }
     }
 
-    private void DisableShield()
+    private void DisableShield(bool broken = false)
     {
+        var aegisSource = broken && HasAureliaAegis ? aureliaAegisSource : null;
         currentShield = 0;
         shieldRemaining = 0f;
+        DisableAureliaAegis();
         if (shieldVisual != null)
         {
             shieldVisual.enabled = false;
@@ -3364,6 +4164,22 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 PrototypeFireVfx.Spawn(
                     "FireGodFlameShieldBreak", transform.position, 0.06f, 1.65f, false, 114);
             }
+        }
+        if (aegisSource != null)
+        {
+            aegisSource.TriggerAureliaShieldBreak(transform.position);
+        }
+    }
+
+    private void DisableAureliaAegis()
+    {
+        aureliaAegisRemaining = 0f;
+        aureliaControlImmunityRemaining = 0f;
+        aureliaAegisSource = null;
+        if (aureliaShieldVfx != null)
+        {
+            Destroy(aureliaShieldVfx.gameObject);
+            aureliaShieldVfx = null;
         }
     }
 
@@ -3381,16 +4197,20 @@ internal sealed class PrototypeCombatant : MonoBehaviour
         {
             isUltimateAction = false;
         }
+        var voidScale = voidAscensionRemaining > 0f ? 2f : 1f;
         if (attackPulse > 0f)
         {
             attackPulse = Mathf.Max(0f, attackPulse - Time.deltaTime);
             var progress = 1f - attackPulse / BasicActionDuration;
             var pulse = 1f + Mathf.Sin(progress * Mathf.PI) * 0.08f;
-            body.transform.localScale = new Vector3(bodySize * pulse, bodySize * pulse, 1f);
+            body.transform.localScale = new Vector3(
+                bodySize * pulse * voidScale,
+                bodySize * pulse * voidScale,
+                1f);
         }
         else
         {
-            body.transform.localScale = new Vector3(bodySize, bodySize, 1f);
+            body.transform.localScale = new Vector3(bodySize * voidScale, bodySize * voidScale, 1f);
         }
 
         if (IsAlive)
@@ -3625,9 +4445,9 @@ internal sealed class PrototypeCombatant : MonoBehaviour
                 case PrototypeSkillKit.Ion: return new Color(0.2f, 0.9f, 1f);
                 case PrototypeSkillKit.Krag: return new Color(0.68f, 0.4f, 1f);
                 case PrototypeSkillKit.Vex: return new Color(1f, 0.2f, 0.55f);
-                case PrototypeSkillKit.Astra: return new Color(0.35f, 1f, 0.65f);
+                case PrototypeSkillKit.Astra: return new Color(0.22f, 0.88f, 0.9f);
                 case PrototypeSkillKit.Lyra: return new Color(1f, 0.9f, 0.2f);
-                case PrototypeSkillKit.Brakk: return new Color(0.3f, 0.85f, 1f);
+                case PrototypeSkillKit.Brakk: return new Color(0.62f, 0.28f, 1f);
                 case PrototypeSkillKit.Hex: return new Color(0.45f, 1f, 0.2f);
                 case PrototypeSkillKit.Mira: return new Color(0.15f, 0.85f, 0.9f);
                 case PrototypeSkillKit.Drake: return new Color(1f, 0.32f, 0.12f);
@@ -3979,6 +4799,10 @@ internal sealed class PrototypeCombatant : MonoBehaviour
             {
                 interval *= 0.65f;
             }
+            if (HasAureliaAegis)
+            {
+                interval *= 0.8f;
+            }
 
             if (slowRemaining > 0f)
             {
@@ -4054,7 +4878,7 @@ internal sealed class PrototypeBattleFeedback : MonoBehaviour
     {
         var pitch = kit == PrototypeSkillKit.Nova ? 1.08f
             : kit == PrototypeSkillKit.Ion ? 1.28f
-            : kit == PrototypeSkillKit.Astra ? 1.18f
+            : kit == PrototypeSkillKit.Astra ? 0.92f
             : kit == PrototypeSkillKit.Lyra ? 1.36f
             : kit == PrototypeSkillKit.Brakk ? 0.82f
             : kit == PrototypeSkillKit.Krag ? 0.7f

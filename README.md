@@ -2,6 +2,20 @@
 
 ## Current phase: P1.1 - Fire God Heavenly Demon
 
+### Aurelia character replacement
+
+- `Astra` được thay identity tại chỗ bằng `Aurelia`; enum, resource filenames và GUID vẫn giữ `Astra`.
+- Save version 5 migrate progression, ownership và squad từ `Astra` sang `Aurelia`.
+- Aurelia dùng 7 imported animation sheets 64x64 và 10 water/dragon VFX sheets sinh deterministic từ `Previews/Aurelia_x8.png`.
+- Runtime kit gồm Hydro Beads, Tidal Cleansing, Dragon Pulse Aura, Dragon Realm và Draconian Aegis.
+
+### Kronos character replacement
+
+- `Brakk` được thay identity tại chỗ bằng `Kronos`; enum, resource filenames và GUID vẫn giữ `Brakk`.
+- Save version 6 migrate progression, ownership và squad từ `Brakk` sang `Kronos`.
+- Kronos dùng 7 imported animation sheets 64x64 và 12 cosmic-void VFX sheets sinh deterministic từ `Tools/Generate-KronosSprite.py`.
+- Runtime kit gồm Event Horizon, Gravitational Crust, Void Parasite, Devourer's Constitution, Singularity Pull và Cosmic Leviathan.
+
 Nova is being replaced in-place by `Fire God Heavenly Demon`, an SSR Human Fire Mage. The internal kit enum, Nova resource filenames and GUIDs remain unchanged so existing references stay compatible.
 
 Combat loop:
@@ -204,10 +218,10 @@ Chạy soak test:
 
 - `Assets/Scripts/PrototypeGacha.cs`
   - Ownership, ticket, rarity roll, duplicate shard, pity và history.
-  - Starter: Fire God Heavenly Demon, Ion, Astra, Lyra và Brakk.
+  - Starter: Fire God Heavenly Demon, Ion, Aurelia, Lyra và Kronos.
 
 - `Assets/Scripts/PrototypeSaveSystem.cs`
-  - Save version hiện tại: 4.
+  - Save version hiện tại: 6.
   - Save cũ tự bỏ qua onboarding; save mới hoặc `DEV RESET` bắt đầu từ bước đầu tiên.
   - Migration và reset các PlayerPrefs key của prototype.
 

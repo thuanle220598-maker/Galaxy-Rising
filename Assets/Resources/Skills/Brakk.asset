@@ -14,34 +14,56 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
   skillKit: 8
   basic:
-    displayName: Guard Rhythm
-    description: Every fourth attack grants Brakk a shield.
+    displayName: Void Claw
+    description: Void strikes infect enemies; at ten Void Resonance, the next strike
+      releases a slowing shockwave.
     cooldown: 0
-    actionDuration: 0.42
+    actionDuration: 0.48
     hitFrame: 0.5
     powerMultiplier: 1
     energyGain: 18
   passive:
-    displayName: Living Rampart
-    description: Blocks access to allies by holding the front row.
+    displayName: Gravitational Crust
+    description: Damage builds up to ten Void Resonance, increasing defenses and
+      reflecting damage.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  passive2:
+    displayName: Void Parasite
+    description: Attacks reduce enemy healing and shielding; infected attackers feed
+      temporary shields back to Kronos.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  passive3:
+    displayName: Devourer's Constitution
+    description: Max Health becomes damage, and a fatal blow triggers a draining
+      Black Hole Collapse once per cooldown.
     cooldown: 0
     actionDuration: 0.2
     hitFrame: 0.5
     powerMultiplier: 1
     energyGain: 0
   active:
-    displayName: Guard Link
-    description: Shield and empower the weakest ally with a visible Guard Link.
+    displayName: Singularity Pull
+    description: Pull nearby enemies inward, infect them and force them to attack
+      Kronos while he takes less damage.
     cooldown: 7
-    actionDuration: 0.58
-    hitFrame: 0.48
+    actionDuration: 0.82
+    hitFrame: 0.56
     powerMultiplier: 1
     energyGain: 0
   ultimate:
-    displayName: Stoneheart Pact
-    description: Grant a durable shield to every ally.
+    displayName: Cosmic Leviathan
+    description: Transform for ten seconds with greater health, defenses, reach,
+      cleaving lifesteal attacks and a decay aura.
     cooldown: 0
-    actionDuration: 0.8
-    hitFrame: 0.5
+    actionDuration: 1.05
+    hitFrame: 0.6
     powerMultiplier: 1
     energyGain: 0

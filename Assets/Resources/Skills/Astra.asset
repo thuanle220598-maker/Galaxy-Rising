@@ -14,32 +14,53 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SkillDefinition
   skillKit: 3
   basic:
-    displayName: Guiding Light
-    description: Every third attack heals the weakest ally and reinforces an existing shield.
+    displayName: Water Serpent
+    description: Each attack creates two Hydro Beads for living allies.
     cooldown: 0
-    actionDuration: 0.38
+    actionDuration: 0.42
     hitFrame: 0.5
     powerMultiplier: 1
     energyGain: 18
   passive:
-    displayName: Sanctuary
-    description: Once per battle, shield an ally who drops below 30% health.
+    displayName: Oceanic Scales
+    description: Hydro Beads restore energy and shield allies, or hasten Aurelia
+      and reduce her Active cooldown.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  passive2:
+    displayName: Tidal Cleansing
+    description: Aurelia's healing and shields cleanse nearby allies and are stronger
+      on hard-controlled targets.
+    cooldown: 0
+    actionDuration: 0.2
+    hitFrame: 0.5
+    powerMultiplier: 1
+    energyGain: 0
+  passive3:
+    displayName: Dragon Pulse Aura
+    description: Nearby allies resist damage and debuffs; burst damage triggers a
+      defensive dragon-pressure wave.
     cooldown: 0
     actionDuration: 0.2
     hitFrame: 0.5
     powerMultiplier: 1
     energyGain: 0
   active:
-    displayName: Star Ward
-    description: Heal the weakest ally, reinforce an existing shield, then grant protection.
+    displayName: Dragon Realm
+    description: Create a healing leyline domain that reduces damage and absorbs
+      Hydro Beads to last longer.
     cooldown: 6
-    actionDuration: 0.56
-    hitFrame: 0.48
-    powerMultiplier: 0.8
+    actionDuration: 0.7
+    hitFrame: 0.57
+    powerMultiplier: 1
     energyGain: 0
   ultimate:
-    displayName: Astral Renewal
-    description: Heal the team, reinforce existing shields and protect the weakest ally.
+    displayName: Draconian Aegis
+    description: Shield the team for 8 seconds with damage, speed and control-immunity
+      blessings.
     cooldown: 0
     actionDuration: 0.78
     hitFrame: 0.5

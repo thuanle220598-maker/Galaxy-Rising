@@ -91,6 +91,10 @@ public static class PrototypeCharacterNames
 {
     public const string LegacyNova = "Nova";
     public const string FireGodHeavenlyDemon = "Fire God Heavenly Demon";
+    public const string LegacyAstra = "Astra";
+    public const string Aurelia = "Aurelia";
+    public const string LegacyBrakk = "Brakk";
+    public const string Kronos = "Kronos";
 }
 
 [CreateAssetMenu(fileName = "Combatant", menuName = "Idle Galaxy Rising/Combatant Definition")]

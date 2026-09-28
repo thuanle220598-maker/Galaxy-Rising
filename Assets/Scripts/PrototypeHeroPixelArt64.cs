@@ -451,9 +451,9 @@ internal static class PrototypeHeroPixelArt64
         {
             case PrototypeSkillKit.Nova: return new Color32(255, 199, 44, 255);
             case PrototypeSkillKit.Ion: return new Color32(54, 232, 255, 255);
-            case PrototypeSkillKit.Astra: return new Color32(118, 255, 196, 255);
+            case PrototypeSkillKit.Astra: return new Color32(86, 228, 200, 255);
             case PrototypeSkillKit.Lyra: return new Color32(255, 224, 62, 255);
-            case PrototypeSkillKit.Brakk: return new Color32(93, 222, 255, 255);
+            case PrototypeSkillKit.Brakk: return new Color32(158, 72, 255, 255);
             case PrototypeSkillKit.Krag: return new Color32(200, 92, 255, 255);
             default: return new Color32(255, 255, 255, 255);
         }

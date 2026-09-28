@@ -248,8 +248,8 @@ internal static class PrototypePixelArt
             case PrototypeSkillKit.Vex: return new Color32(255, 70, 155, 255);
             case PrototypeSkillKit.Rook: return new Color32(255, 125, 55, 255);
             case PrototypeSkillKit.Lyra: return new Color32(255, 238, 95, 255);
-            case PrototypeSkillKit.Astra: return new Color32(120, 255, 185, 255);
-            case PrototypeSkillKit.Brakk: return new Color32(120, 225, 255, 255);
+            case PrototypeSkillKit.Astra: return new Color32(86, 228, 200, 255);
+            case PrototypeSkillKit.Brakk: return new Color32(158, 72, 255, 255);
             case PrototypeSkillKit.Hex: return new Color32(135, 255, 80, 255);
             case PrototypeSkillKit.Nyx: return new Color32(115, 165, 255, 255);
             case PrototypeSkillKit.Mira: return new Color32(55, 225, 235, 255);

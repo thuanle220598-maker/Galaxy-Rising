@@ -13,7 +13,7 @@ internal static class PrototypeContentGenerator
         EditorApplication.delayCall += GenerateMissingContent;
     }
 
-    private static void GenerateMissingContent()
+    public static void GenerateMissingContent()
     {
         EnsureFolder(Root, "Skills");
         EnsureFolder(Root, "Stages");
@@ -23,6 +23,8 @@ internal static class PrototypeContentGenerator
 
         CreateSkillSets();
         ConfigureFireGodHeavenlyDemon();
+        ConfigureAurelia();
+        ConfigureKronos();
         for (var stage = 1; stage <= 20; stage++)
         {
             CreateStage(stage);
@@ -74,10 +76,12 @@ internal static class PrototypeContentGenerator
             S("Static Field", "Damage and stun the target, then arc to another enemy.", 7f, 0.5f, 0.54f, 0.9f),
             S("Volt Rush", "Strike three times and retarget whenever an enemy falls.", 0f, 0.68f, 0.5f, 0.85f));
         CreateSkill(PrototypeSkillKit.Astra,
-            S("Guiding Light", "Every third attack heals the weakest ally.", 0f, 0.38f, 0.5f, 1f, 18),
-            S("Sanctuary", "Once per battle, shield an ally who drops below 30% health.", 0f, 0.2f, 0.5f, 1f),
-            S("Star Ward", "Heal and shield the weakest ally.", 6f, 0.56f, 0.48f, 0.8f),
-            S("Astral Renewal", "Heal the whole team and heavily protect the weakest ally.", 0f, 0.78f, 0.5f, 1f));
+            S("Water Serpent", "Each attack creates two Hydro Beads for living allies.", 0f, 0.42f, 0.5f, 1f, 18),
+            S("Oceanic Scales", "Hydro Beads restore energy and shield allies, or hasten Aurelia and reduce her Active cooldown.", 0f, 0.2f, 0.5f, 1f),
+            S("Dragon Realm", "Create a healing leyline domain that reduces damage and absorbs Hydro Beads to last longer.", 6f, 0.7f, 0.57f, 1f),
+            S("Draconian Aegis", "Shield the team for 8 seconds with damage, speed and control-immunity blessings.", 0f, 0.78f, 0.5f, 1f),
+            S("Tidal Cleansing", "Aurelia's healing and shields cleanse nearby allies and are stronger on hard-controlled targets.", 0f, 0.2f, 0.5f, 1f),
+            S("Dragon Pulse Aura", "Nearby allies resist damage and debuffs; burst damage triggers a defensive dragon-pressure wave.", 0f, 0.2f, 0.5f, 1f));
         CreateSkill(PrototypeSkillKit.Krag,
             S("Gravity Fist", "Front-line attacks build energy through sustained contact.", 0f, 0.4f, 0.5f, 1f, 18),
             S("Last Bastion", "Gain defense above 50% health and a large shield when critically wounded.", 0f, 0.2f, 0.5f, 1f),
@@ -99,10 +103,12 @@ internal static class PrototypeContentGenerator
             S("Sunpiercer", "Damage and burn one target.", 6f, 0.52f, 0.54f, 1.35f),
             S("Helios Rain", "Damage and burn the entire enemy team.", 0f, 0.76f, 0.52f, 1.1f));
         CreateSkill(PrototypeSkillKit.Brakk,
-            S("Guard Rhythm", "Every fourth attack grants Brakk a shield.", 0f, 0.42f, 0.5f, 1f, 18),
-            S("Living Rampart", "Blocks access to allies by holding the front row.", 0f, 0.2f, 0.5f, 1f),
-            S("Guard Link", "Shield and empower the weakest ally.", 7f, 0.58f, 0.48f, 1f),
-            S("Stoneheart Pact", "Grant a durable shield to every ally.", 0f, 0.8f, 0.5f, 1f));
+            S("Void Claw", "Void strikes infect enemies; at ten Void Resonance, the next strike releases a slowing shockwave.", 0f, 0.48f, 0.5f, 1f, 18),
+            S("Gravitational Crust", "Damage builds up to ten Void Resonance, increasing defenses and reflecting damage.", 0f, 0.2f, 0.5f, 1f),
+            S("Singularity Pull", "Pull nearby enemies inward, infect them and force them to attack Kronos while he takes less damage.", 7f, 0.82f, 0.56f, 1f),
+            S("Cosmic Leviathan", "Transform for ten seconds with greater health, defenses, reach, cleaving lifesteal attacks and a decay aura.", 0f, 1.05f, 0.6f, 1f),
+            S("Void Parasite", "Attacks reduce enemy healing and shielding; infected attackers feed temporary shields back to Kronos.", 0f, 0.2f, 0.5f, 1f),
+            S("Devourer's Constitution", "Max Health becomes damage, and a fatal blow triggers a draining Black Hole Collapse once per cooldown.", 0f, 0.2f, 0.5f, 1f));
         CreateSkill(PrototypeSkillKit.Hex,
             S("Forked Virus", "Every third attack splashes to a second target.", 0f, 0.4f, 0.5f, 1f, 18),
             S("Persistent Corruption", "Poison continues damaging targets after the initial hit.", 0f, 0.2f, 0.5f, 1f),
@@ -202,6 +208,106 @@ internal static class PrototypeContentGenerator
         {
             combatant.EditorConfigureAnimationFrames(
                 idle, run, attack, active, ultimate, hit, death);
+        }
+
+        EditorUtility.SetDirty(combatant);
+        EditorUtility.SetDirty(skill);
+    }
+
+    private static void ConfigureAurelia()
+    {
+        const string combatantPath = "Assets/Resources/Combatants/Allies/Astra.asset";
+        const string skillPath = "Assets/Resources/Skills/Astra.asset";
+        var combatant = AssetDatabase.LoadAssetAtPath<CombatantDefinition>(combatantPath);
+        var skill = AssetDatabase.LoadAssetAtPath<SkillDefinition>(skillPath);
+        if (combatant == null || skill == null)
+        {
+            return;
+        }
+
+        combatant.EditorConfigure(
+            PrototypeCharacterNames.Aurelia,
+            PrototypeSpecies.Dragon,
+            PrototypeCombatClass.Support,
+            combatant.Rarity,
+            new Color(0.22f, 0.78f, 0.88f),
+            combatant.MaxHealth,
+            combatant.Attack,
+            combatant.Defense,
+            combatant.MoveSpeed,
+            combatant.AttackInterval,
+            PrototypeSkillKit.Astra,
+            combatant.FormationOrder);
+        skill.EditorConfigure(
+            PrototypeSkillKit.Astra,
+            S("Water Serpent", "Each attack creates two Hydro Beads for living allies.", 0f, 0.42f, 0.5f, 1f, 18),
+            S("Oceanic Scales", "Hydro Beads restore energy and shield allies, or hasten Aurelia and reduce her Active cooldown.", 0f, 0.2f, 0.5f, 1f),
+            S("Dragon Realm", "Create a healing leyline domain that reduces damage and absorbs Hydro Beads to last longer.", 6f, 0.7f, 0.57f, 1f),
+            S("Draconian Aegis", "Shield the team for 8 seconds with damage, speed and control-immunity blessings.", 0f, 0.78f, 0.5f, 1f),
+            S("Tidal Cleansing", "Aurelia's healing and shields cleanse nearby allies and are stronger on hard-controlled targets.", 0f, 0.2f, 0.5f, 1f),
+            S("Dragon Pulse Aura", "Nearby allies resist damage and debuffs; burst damage triggers a defensive dragon-pressure wave.", 0f, 0.2f, 0.5f, 1f));
+
+        var idle = LoadSprites("Assets/Art/Characters/Aurelia/Combat/AureliaIdle.png");
+        var run = LoadSprites("Assets/Art/Characters/Aurelia/Combat/AureliaRun.png");
+        var attack = LoadSprites("Assets/Art/Characters/Aurelia/Combat/AureliaBasic.png");
+        var active = LoadSprites("Assets/Art/Characters/Aurelia/Combat/AureliaActive.png");
+        var ultimate = LoadSprites("Assets/Art/Characters/Aurelia/Combat/AureliaUltimate.png");
+        var hit = LoadSprites("Assets/Art/Characters/Aurelia/Combat/AureliaHit.png");
+        var death = LoadSprites("Assets/Art/Characters/Aurelia/Combat/AureliaDeath.png");
+        if (idle.Length == 6 && run.Length == 8 && attack.Length == 6 && active.Length == 10 &&
+            ultimate.Length == 12 && hit.Length == 4 && death.Length == 8)
+        {
+            combatant.EditorConfigureAnimationFrames(idle, run, attack, active, ultimate, hit, death);
+        }
+
+        EditorUtility.SetDirty(combatant);
+        EditorUtility.SetDirty(skill);
+    }
+
+    private static void ConfigureKronos()
+    {
+        const string combatantPath = "Assets/Resources/Combatants/Allies/Brakk.asset";
+        const string skillPath = "Assets/Resources/Skills/Brakk.asset";
+        var combatant = AssetDatabase.LoadAssetAtPath<CombatantDefinition>(combatantPath);
+        var skill = AssetDatabase.LoadAssetAtPath<SkillDefinition>(skillPath);
+        if (combatant == null || skill == null)
+        {
+            return;
+        }
+
+        combatant.EditorConfigure(
+            PrototypeCharacterNames.Kronos,
+            PrototypeSpecies.Cosmic,
+            PrototypeCombatClass.Tanker,
+            combatant.Rarity,
+            new Color(0.48f, 0.2f, 0.72f),
+            combatant.MaxHealth,
+            combatant.Attack,
+            combatant.Defense,
+            combatant.MoveSpeed,
+            combatant.AttackInterval,
+            PrototypeSkillKit.Brakk,
+            combatant.FormationOrder);
+        skill.EditorConfigure(
+            PrototypeSkillKit.Brakk,
+            S("Void Claw", "Void strikes infect enemies; at ten Void Resonance, the next strike releases a slowing shockwave.", 0f, 0.48f, 0.5f, 1f, 18),
+            S("Gravitational Crust", "Damage builds up to ten Void Resonance, increasing defenses and reflecting damage.", 0f, 0.2f, 0.5f, 1f),
+            S("Singularity Pull", "Pull nearby enemies inward, infect them and force them to attack Kronos while he takes less damage.", 7f, 0.82f, 0.56f, 1f),
+            S("Cosmic Leviathan", "Transform for ten seconds with greater health, defenses, reach, cleaving lifesteal attacks and a decay aura.", 0f, 1.05f, 0.6f, 1f),
+            S("Void Parasite", "Attacks reduce enemy healing and shielding; infected attackers feed temporary shields back to Kronos.", 0f, 0.2f, 0.5f, 1f),
+            S("Devourer's Constitution", "Max Health becomes damage, and a fatal blow triggers a draining Black Hole Collapse once per cooldown.", 0f, 0.2f, 0.5f, 1f));
+
+        var idle = LoadSprites("Assets/Art/Characters/Kronos/Combat/KronosIdle.png");
+        var run = LoadSprites("Assets/Art/Characters/Kronos/Combat/KronosRun.png");
+        var attack = LoadSprites("Assets/Art/Characters/Kronos/Combat/KronosBasic.png");
+        var active = LoadSprites("Assets/Art/Characters/Kronos/Combat/KronosActive.png");
+        var ultimate = LoadSprites("Assets/Art/Characters/Kronos/Combat/KronosUltimate.png");
+        var hit = LoadSprites("Assets/Art/Characters/Kronos/Combat/KronosHit.png");
+        var death = LoadSprites("Assets/Art/Characters/Kronos/Combat/KronosDeath.png");
+        if (idle.Length == 8 && run.Length == 8 && attack.Length == 8 && active.Length == 12 &&
+            ultimate.Length == 14 && hit.Length == 5 && death.Length == 10)
+        {
+            combatant.EditorConfigureAnimationFrames(idle, run, attack, active, ultimate, hit, death);
         }
 
         EditorUtility.SetDirty(combatant);

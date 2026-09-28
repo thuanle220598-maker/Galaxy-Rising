@@ -11,6 +11,8 @@ using UnityEngine.UI;
 public sealed class BattleHomeUiPlayModeTests
 {
     private const string FireGodName = "Fire God Heavenly Demon";
+    private const string AureliaName = "Aurelia";
+    private const string KronosName = "Kronos";
     private const string SaveVersionKey = "Prototype.SaveVersion";
     private const string OnboardingStepKey = "Prototype.OnboardingStep";
     private const string IdleStageKey = "Prototype.IdleStage";
@@ -63,7 +65,7 @@ public sealed class BattleHomeUiPlayModeTests
                 savedStrings[key] = PlayerPrefs.GetString(key);
             }
         }
-        PlayerPrefs.SetInt(SaveVersionKey, 4);
+        PlayerPrefs.SetInt(SaveVersionKey, 6);
         PlayerPrefs.SetInt(OnboardingStepKey, 1);
         PlayerPrefs.Save();
     }
@@ -121,7 +123,7 @@ public sealed class BattleHomeUiPlayModeTests
         Assert.That(GameObject.Find("Battle Deck"), Is.Not.Null);
         Assert.That(HasAudioClip(Camera.main, "Pixel Battle Loop"), Is.True);
 
-        foreach (var heroName in new[] { FireGodName, "Ion", "Astra", "Lyra", "Brakk" })
+        foreach (var heroName in new[] { FireGodName, "Ion", AureliaName, "Lyra", KronosName })
         {
             var body = GameObject.Find(heroName).transform.Find("Body").GetComponent<SpriteRenderer>();
             Assert.That(body.sprite.texture.name, Is.Not.Empty);
@@ -139,7 +141,7 @@ public sealed class BattleHomeUiPlayModeTests
             Assert.That(body.transform.parent.GetComponent<SortingGroup>(), Is.Not.Null);
         }
 
-        var allyPositions = new[] { FireGodName, "Ion", "Astra", "Lyra", "Brakk" };
+        var allyPositions = new[] { FireGodName, "Ion", AureliaName, "Lyra", KronosName };
         System.Array.Sort(allyPositions, (left, right) =>
             GameObject.Find(left).transform.position.y.CompareTo(GameObject.Find(right).transform.position.y));
         for (var index = 1; index < allyPositions.Length; index++)
@@ -432,6 +434,203 @@ public sealed class BattleHomeUiPlayModeTests
     }
 
     [Test]
+    public void AureliaReplacesAstraInPlaceWithImportedAnimationAndWaterVfx()
+    {
+        var definitionType = System.Type.GetType("CombatantDefinition, Assembly-CSharp");
+        var skillType = System.Type.GetType("SkillDefinition, Assembly-CSharp");
+        var pixelArtType = System.Type.GetType("PrototypePixelArt, Assembly-CSharp");
+        var definition = Resources.Load("Combatants/Allies/Astra", definitionType);
+        var skill = Resources.Load("Skills/Astra", skillType);
+        Assert.That(definition, Is.Not.Null);
+        Assert.That(skill, Is.Not.Null);
+        Assert.That(GetInstanceProperty<string>(definition, "DisplayName"), Is.EqualTo(AureliaName));
+        Assert.That(GetInstanceProperty<object>(definition, "Species").ToString(), Is.EqualTo("Dragon"));
+        Assert.That(GetInstanceProperty<object>(definition, "CombatClass").ToString(), Is.EqualTo("Support"));
+        Assert.That(GetInstanceProperty<string>(skill, "Summary"), Does.Contain("Oceanic Scales"));
+        Assert.That(GetInstanceProperty<string>(skill, "Summary"), Does.Contain("Tidal Cleansing"));
+        Assert.That(GetInstanceProperty<string>(skill, "Summary"), Does.Contain("Dragon Pulse Aura"));
+
+        var create = pixelArtType.GetMethod(
+            "Create", BindingFlags.Public | BindingFlags.Static, null,
+            new[] { definitionType, typeof(bool) }, null);
+        var sprites = create.Invoke(null, new[] { definition, (object)false });
+        Assert.That(GetSpriteFrames(sprites, "Idle"), Has.Length.EqualTo(6));
+        Assert.That(GetSpriteFrames(sprites, "Run"), Has.Length.EqualTo(8));
+        Assert.That(GetSpriteFrames(sprites, "Attack"), Has.Length.EqualTo(6));
+        Assert.That(GetSpriteFrames(sprites, "Skill"), Has.Length.EqualTo(10));
+        Assert.That(GetSpriteFrames(sprites, "Ultimate"), Has.Length.EqualTo(12));
+        Assert.That(GetSpriteFrames(sprites, "Hit"), Has.Length.EqualTo(4));
+        Assert.That(GetSpriteFrames(sprites, "Death"), Has.Length.EqualTo(8));
+
+        var effects = new Dictionary<string, int>
+        {
+            { "AureliaWaterSerpent", 8 }, { "AureliaHydroBead", 6 },
+            { "AureliaCleansingRing", 8 }, { "AureliaDragonAura", 8 },
+            { "AureliaDragonPressure", 10 }, { "AureliaDomain", 12 },
+            { "AureliaShieldLoop", 8 }, { "AureliaShieldBreak", 8 },
+            { "AureliaUltimateDragon", 12 }, { "AureliaBlessingImpact", 8 }
+        };
+        foreach (var effect in effects)
+        {
+            Assert.That(Resources.LoadAll<Sprite>($"VFX/Aurelia/{effect.Key}"),
+                Has.Length.EqualTo(effect.Value), effect.Key);
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator AureliaHydroBeadsCleanseAndAegisBlocksControl()
+    {
+        SceneManager.LoadScene("SampleScene");
+        yield return null;
+        var combatPrototype = System.Type.GetType("CombatPrototype, Assembly-CSharp");
+        var combatantType = System.Type.GetType("PrototypeCombatant, Assembly-CSharp");
+        combatPrototype.GetMethod("Create", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
+        yield return null;
+        Time.timeScale = 0f;
+
+        var aurelia = GameObject.Find(AureliaName).GetComponent(combatantType);
+        var ally = GameObject.Find("Ion").GetComponent(combatantType);
+        Assert.That(aurelia, Is.Not.Null);
+        Assert.That(ally, Is.Not.Null);
+
+        InvokeInstance(ally, "ApplyMovementSlow", 0.5f, 2f);
+        Assert.That(GetInstanceProperty<string>(ally, "StatusSummary"), Does.Contain("Slow"));
+        var previousEnergy = GetInstanceProperty<float>(ally, "Energy");
+        InvokeInstance(aurelia, "ResolveHydroBead", ally);
+        Assert.That(GetInstanceProperty<float>(ally, "Energy"), Is.EqualTo(previousEnergy + 3f));
+        Assert.That(GetInstanceProperty<int>(ally, "CurrentShield"), Is.GreaterThan(0));
+        Assert.That(GetInstanceProperty<string>(ally, "StatusSummary"), Does.Not.Contain("Slow"));
+
+        SetField(aurelia, "activeSkillCooldown", 5f);
+        InvokeInstance(aurelia, "ResolveHydroBead", aurelia);
+        Assert.That(GetInstanceProperty<float>(aurelia, "ActiveSkillCooldown"), Is.EqualTo(4f));
+        Assert.That(GetInstanceProperty<float>(aurelia, "MovementSpeedMultiplier"), Is.EqualTo(1.15f).Within(0.001f));
+
+        InvokeInstance(aurelia, "CastDragonRealm");
+        var domain = GameObject.Find("Long Mach Domain");
+        Assert.That(domain, Is.Not.Null);
+        var beforeAbsorb = GetInstanceProperty<float>(domain.GetComponent(
+            System.Type.GetType("PrototypeWaterDomain, Assembly-CSharp")), "Remaining");
+        InvokeInstance(domain.GetComponent(System.Type.GetType("PrototypeWaterDomain, Assembly-CSharp")), "AbsorbBead");
+        Assert.That(GetInstanceProperty<float>(domain.GetComponent(
+            System.Type.GetType("PrototypeWaterDomain, Assembly-CSharp")), "Remaining"),
+            Is.EqualTo(beforeAbsorb + 1f));
+
+        InvokeInstance(aurelia, "CastDraconianAegis");
+        InvokeInstance(ally, "ApplyStun", 2f);
+        Assert.That(GetInstanceProperty<string>(ally, "StatusSummary"), Does.Not.Contain("Stun"));
+        Assert.That(GetInstanceProperty<float>(ally, "MovementSpeedMultiplier"), Is.GreaterThanOrEqualTo(1.2f));
+    }
+
+    [Test]
+    public void KronosReplacesBrakkInPlaceWithImportedAnimationAndVoidVfx()
+    {
+        var definitionType = System.Type.GetType("CombatantDefinition, Assembly-CSharp");
+        var skillType = System.Type.GetType("SkillDefinition, Assembly-CSharp");
+        var pixelArtType = System.Type.GetType("PrototypePixelArt, Assembly-CSharp");
+        var definition = Resources.Load("Combatants/Allies/Brakk", definitionType);
+        var skill = Resources.Load("Skills/Brakk", skillType);
+        Assert.That(definition, Is.Not.Null);
+        Assert.That(skill, Is.Not.Null);
+        Assert.That(GetInstanceProperty<string>(definition, "DisplayName"), Is.EqualTo(KronosName));
+        Assert.That(GetInstanceProperty<object>(definition, "Species").ToString(), Is.EqualTo("Cosmic"));
+        Assert.That(GetInstanceProperty<object>(definition, "CombatClass").ToString(), Is.EqualTo("Tanker"));
+        Assert.That(GetInstanceProperty<object>(definition, "SkillKit").ToString(), Is.EqualTo("Brakk"));
+        Assert.That(GetInstanceProperty<string>(skill, "Summary"), Does.Contain("Gravitational Crust"));
+        Assert.That(GetInstanceProperty<string>(skill, "Summary"), Does.Contain("Void Parasite"));
+        Assert.That(GetInstanceProperty<string>(skill, "Summary"), Does.Contain("Devourer's Constitution"));
+
+        var create = pixelArtType.GetMethod(
+            "Create", BindingFlags.Public | BindingFlags.Static, null,
+            new[] { definitionType, typeof(bool) }, null);
+        var sprites = create.Invoke(null, new[] { definition, (object)false });
+        Assert.That(GetSpriteFrames(sprites, "Idle"), Has.Length.EqualTo(8));
+        Assert.That(GetSpriteFrames(sprites, "Run"), Has.Length.EqualTo(8));
+        Assert.That(GetSpriteFrames(sprites, "Attack"), Has.Length.EqualTo(8));
+        Assert.That(GetSpriteFrames(sprites, "Skill"), Has.Length.EqualTo(12));
+        Assert.That(GetSpriteFrames(sprites, "Ultimate"), Has.Length.EqualTo(14));
+        Assert.That(GetSpriteFrames(sprites, "Hit"), Has.Length.EqualTo(5));
+        Assert.That(GetSpriteFrames(sprites, "Death"), Has.Length.EqualTo(10));
+
+        var effects = new Dictionary<string, int>
+        {
+            { "KronosDimensionalTear", 10 }, { "KronosVoidField", 12 },
+            { "KronosMassOrbit", 10 }, { "KronosResonanceBurst", 10 },
+            { "KronosParasite", 8 }, { "KronosParasiteDrain", 8 },
+            { "KronosSingularity", 12 }, { "KronosLeviathanAwaken", 14 },
+            { "KronosLeviathanAura", 12 }, { "KronosVoidSlash", 8 },
+            { "KronosCollapse", 10 }, { "KronosDecayPulse", 10 }
+        };
+        foreach (var effect in effects)
+        {
+            Assert.That(Resources.LoadAll<Sprite>($"VFX/Kronos/{effect.Key}"),
+                Has.Length.EqualTo(effect.Value), effect.Key);
+        }
+    }
+
+    [UnityTest]
+    public IEnumerator KronosVoidKitPullsInfectsTransformsAndSurvivesFatalDamage()
+    {
+        SceneManager.LoadScene("SampleScene");
+        yield return null;
+        var combatPrototype = System.Type.GetType("CombatPrototype, Assembly-CSharp");
+        var battleType = System.Type.GetType("PrototypeBattle, Assembly-CSharp");
+        var combatantType = System.Type.GetType("PrototypeCombatant, Assembly-CSharp");
+        combatPrototype.GetMethod("Create", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, null);
+        yield return null;
+        Time.timeScale = 0f;
+
+        var kronos = GameObject.Find(KronosName).GetComponent(combatantType);
+        var battle = Object.FindFirstObjectByType(battleType);
+        SetField(battle, "<IsIdleFarmMode>k__BackingField", false);
+        var enemies = (System.Array)battleType.GetProperty("Enemies").GetValue(battle);
+        var enemy = enemies.GetValue(0);
+        Assert.That(kronos, Is.Not.Null);
+        Assert.That(GetInstanceProperty<string>(enemy, "StatusSummary"), Does.Contain("Slow"));
+
+        InvokeInstance(kronos, "ApplyStun", 2f);
+        Assert.That(GetInstanceProperty<string>(kronos, "StatusSummary"), Does.Not.Contain("Stun"));
+
+        var maxHealth = GetInstanceProperty<int>(kronos, "MaxHealth");
+        InvokeInstance(kronos, "TakeDamage", Mathf.CeilToInt(maxHealth * 0.06f), false);
+        Assert.That(GetField<int>(kronos, "voidResonanceStacks"), Is.GreaterThanOrEqualTo(1));
+        SetField(kronos, "voidResonanceStacks", 10);
+        InvokeInstance(kronos, "PerformKronosBasic");
+        Assert.That(GetField<int>(kronos, "voidResonanceStacks"), Is.Zero);
+
+        ((Component)enemy).transform.position = ((Component)kronos).transform.position + Vector3.right * 2f;
+        InvokeInstance(kronos, "CastSingularityPull");
+        Assert.That(GetField<object>(enemy, "forcedTarget"), Is.SameAs(kronos));
+        Assert.That(GetField<float>(enemy, "voidParasiteRemaining"), Is.EqualTo(4f));
+        Assert.That(GetField<float>(kronos, "voidTauntReductionRemaining"), Is.EqualTo(2f));
+
+        var enemyMaximum = GetInstanceProperty<int>(enemy, "MaxHealth");
+        SetField(enemy, "currentHealth", enemyMaximum - 100);
+        Assert.That((int)InvokeInstance(enemy, "Heal", 100), Is.EqualTo(85));
+        SetField(enemy, "currentShield", 0);
+        InvokeInstance(enemy, "GrantShield", 100, 4f);
+        Assert.That(GetInstanceProperty<int>(enemy, "CurrentShield"), Is.EqualTo(85));
+
+        SetField(kronos, "voidTauntReductionRemaining", 0f);
+        InvokeInstance(kronos, "TakeDamageFrom", 100, false, enemy);
+        Assert.That(GetInstanceProperty<int>(kronos, "CurrentShield"), Is.GreaterThanOrEqualTo(18));
+
+        var baseRange = GetInstanceProperty<float>(kronos, "AttackRange");
+        InvokeInstance(kronos, "CastCosmicLeviathan");
+        Assert.That(GetInstanceProperty<int>(kronos, "MaxHealth"), Is.GreaterThan(maxHealth));
+        Assert.That(GetInstanceProperty<float>(kronos, "AttackRange"), Is.GreaterThan(baseRange));
+        InvokeInstance(kronos, "CastSingularityPull");
+        Assert.That(GetField<float>(kronos, "voidTauntReductionRemaining"), Is.EqualTo(2.5f));
+
+        SetField(kronos, "currentShield", 0);
+        SetField(kronos, "currentHealth", 10);
+        SetField(kronos, "voidRebirthCooldown", 0f);
+        InvokeInstance(kronos, "TakeDamage", 999999, false);
+        Assert.That(GetInstanceProperty<int>(kronos, "CurrentHealth"), Is.EqualTo(1));
+        Assert.That(GetField<float>(kronos, "voidCollapseRemaining"), Is.EqualTo(2f));
+    }
+
+    [Test]
     public void FireCombatMathKeepsDotSlowGeometryAndBalanceBounded()
     {
         var fireCombat = System.Type.GetType("PrototypeFireCombat, Assembly-CSharp");
@@ -691,7 +890,10 @@ public sealed class BattleHomeUiPlayModeTests
             var definition = Resources.Load($"Combatants/Allies/{heroName}", definitionType);
             Assert.That(definition, Is.Not.Null);
             var spriteSet = create.Invoke(null, new[] { definition, (object)false });
-            AssertDetailedSpriteSet(spriteSet, heroName == "Nova" ? 68 : 64, heroName == "Nova" ? 8 : 6);
+            if (heroName != "Astra" && heroName != "Brakk")
+            {
+                AssertDetailedSpriteSet(spriteSet, heroName == "Nova" ? 68 : 64, heroName == "Nova" ? 8 : 6);
+            }
             if (heroName == "Nova")
             {
                 foreach (var state in new[] { "Idle", "Run", "Attack", "Skill", "Ultimate", "Hit", "Death" })
@@ -707,6 +909,18 @@ public sealed class BattleHomeUiPlayModeTests
                 Assert.That(GetInstanceProperty<object>(definition, "CombatClass").ToString(), Is.EqualTo("Mage"));
                 Assert.That(GetInstanceProperty<float>(definition, "AttackRange"), Is.EqualTo(4f));
                 Assert.That(GetSpriteFrames(spriteSet, "Attack")[0].texture.name, Is.EqualTo("NovaFlameBasicAttack"));
+            }
+            else if (heroName == "Astra")
+            {
+                Assert.That(GetInstanceProperty<string>(definition, "DisplayName"), Is.EqualTo(AureliaName));
+                Assert.That(GetSpriteFrames(spriteSet, "Idle"), Has.Length.EqualTo(6));
+                Assert.That(GetSpriteFrames(spriteSet, "Attack")[0].texture.name, Is.EqualTo("AureliaBasic"));
+            }
+            else if (heroName == "Brakk")
+            {
+                Assert.That(GetInstanceProperty<string>(definition, "DisplayName"), Is.EqualTo(KronosName));
+                Assert.That(GetSpriteFrames(spriteSet, "Idle"), Has.Length.EqualTo(8));
+                Assert.That(GetSpriteFrames(spriteSet, "Attack")[0].texture.name, Is.EqualTo("KronosBasic"));
             }
         }
 
@@ -1168,20 +1382,21 @@ public sealed class BattleHomeUiPlayModeTests
         Assert.That(migrate, Is.Not.Null);
         migrate.Invoke(null, null);
 
-        Assert.That(PlayerPrefs.GetInt(SaveVersionKey), Is.EqualTo(4));
+        Assert.That(PlayerPrefs.GetInt(SaveVersionKey), Is.EqualTo(6));
         Assert.That(PlayerPrefs.GetInt(OnboardingStepKey), Is.EqualTo(6));
     }
 
     [Test]
-    public void VersionFourMigrationRenamesAndMergesNovaData()
+    public void LegacyNameMigrationsRenameAndMergeHeroData()
     {
         PlayerPrefs.SetInt(SaveVersionKey, 3);
         PlayerPrefs.SetString(ProgressionKey,
             "{\"version\":2,\"characters\":[" +
             "{\"characterName\":\"Nova\",\"level\":27,\"experience\":9,\"stars\":4,\"shards\":70,\"basicSkillLevel\":6,\"passiveSkillLevel\":7,\"activeSkillLevel\":8,\"ultimateSkillLevel\":9,\"weaponLevel\":5,\"armorLevel\":4,\"coreLevel\":3}," +
-            "{\"characterName\":\"Fire God Heavenly Demon\",\"level\":12,\"experience\":40,\"stars\":2,\"shards\":10,\"basicSkillLevel\":2,\"passiveSkillLevel\":3,\"activeSkillLevel\":4,\"ultimateSkillLevel\":5,\"weaponLevel\":1,\"armorLevel\":7,\"coreLevel\":2}]}");
+            "{\"characterName\":\"Fire God Heavenly Demon\",\"level\":12,\"experience\":40,\"stars\":2,\"shards\":10,\"basicSkillLevel\":2,\"passiveSkillLevel\":3,\"activeSkillLevel\":4,\"ultimateSkillLevel\":5,\"weaponLevel\":1,\"armorLevel\":7,\"coreLevel\":2}," +
+            "{\"characterName\":\"Brakk\",\"level\":19,\"experience\":11,\"stars\":3,\"shards\":25,\"basicSkillLevel\":3,\"passiveSkillLevel\":4,\"activeSkillLevel\":5,\"ultimateSkillLevel\":6,\"weaponLevel\":2,\"armorLevel\":4,\"coreLevel\":3}]}");
         PlayerPrefs.SetString(GachaKey,
-            "{\"version\":2,\"tickets\":20,\"highRarityPity\":0,\"urPity\":0,\"ownedCharacters\":[\"Nova\",\"Ion\"],\"history\":[]}");
+            "{\"version\":2,\"tickets\":20,\"highRarityPity\":0,\"urPity\":0,\"ownedCharacters\":[\"Nova\",\"Ion\",\"Brakk\"],\"history\":[]}");
         PlayerPrefs.SetString(SquadKey,
             "{\"version\":2,\"names\":[\"Nova\",\"Ion\",\"Astra\",\"Lyra\",\"Brakk\"],\"rows\":[1,1,2,2,0]}");
         PlayerPrefs.Save();
@@ -1195,15 +1410,24 @@ public sealed class BattleHomeUiPlayModeTests
         var progression = System.Type.GetType("PrototypeProgression, Assembly-CSharp");
         var gacha = System.Type.GetType("PrototypeGacha, Assembly-CSharp");
         var progress = InvokeStatic(progression, "Get", FireGodName);
-        Assert.That(PlayerPrefs.GetInt(SaveVersionKey), Is.EqualTo(4));
+        var kronosProgress = InvokeStatic(progression, "Get", KronosName);
+        Assert.That(PlayerPrefs.GetInt(SaveVersionKey), Is.EqualTo(6));
         Assert.That(GetField<int>(progress, "level"), Is.EqualTo(27));
         Assert.That(GetField<int>(progress, "experience"), Is.EqualTo(40));
         Assert.That(GetField<int>(progress, "armorLevel"), Is.EqualTo(7));
         Assert.That(PlayerPrefs.GetString(ProgressionKey), Does.Not.Contain("\"Nova\""));
+        Assert.That(GetField<int>(kronosProgress, "level"), Is.EqualTo(19));
+        Assert.That(PlayerPrefs.GetString(ProgressionKey), Does.Not.Contain("\"Brakk\""));
         Assert.That(InvokeStatic(gacha, "IsOwned", FireGodName), Is.True);
         Assert.That(InvokeStatic(gacha, "IsOwned", "Nova"), Is.False);
+        Assert.That(InvokeStatic(gacha, "IsOwned", KronosName), Is.True);
+        Assert.That(InvokeStatic(gacha, "IsOwned", "Brakk"), Is.False);
         Assert.That(PlayerPrefs.GetString(SquadKey), Does.Contain(FireGodName));
         Assert.That(PlayerPrefs.GetString(SquadKey), Does.Not.Contain("\"Nova\""));
+        Assert.That(PlayerPrefs.GetString(SquadKey), Does.Contain(AureliaName));
+        Assert.That(PlayerPrefs.GetString(SquadKey), Does.Not.Contain("\"Astra\""));
+        Assert.That(PlayerPrefs.GetString(SquadKey), Does.Contain(KronosName));
+        Assert.That(PlayerPrefs.GetString(SquadKey), Does.Not.Contain("\"Brakk\""));
     }
 
     [Test]

@@ -5,7 +5,8 @@ internal enum PrototypeDamageType
 {
     Physical,
     Fire,
-    True
+    True,
+    Magic
 }
 
 [Flags]

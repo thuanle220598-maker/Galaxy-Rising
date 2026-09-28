@@ -27,7 +27,8 @@ internal static class PrototypeGacha
     private const int UrPityLimit = 50;
     private static readonly string[] StarterCharacters =
     {
-        PrototypeCharacterNames.FireGodHeavenlyDemon, "Ion", "Astra", "Lyra", "Brakk"
+        PrototypeCharacterNames.FireGodHeavenlyDemon, "Ion", PrototypeCharacterNames.Aurelia, "Lyra",
+        PrototypeCharacterNames.Kronos
     };
     private static PrototypeGachaSave save;
 

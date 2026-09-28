@@ -2,7 +2,7 @@ using UnityEngine;
 
 internal static class PrototypeSaveSystem
 {
-    private const int CurrentVersion = 4;
+    private const int CurrentVersion = 6;
     private const string VersionKey = "Prototype.SaveVersion";
     internal const string OnboardingStepKey = "Prototype.OnboardingStep";
     internal const int OnboardingCompleteStep = 6;
@@ -45,6 +45,30 @@ internal static class PrototypeSaveSystem
             PrototypeSession.MigrateCharacterName(
                 PrototypeCharacterNames.LegacyNova,
                 PrototypeCharacterNames.FireGodHeavenlyDemon);
+        }
+        if (version < 5)
+        {
+            PrototypeProgression.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyAstra,
+                PrototypeCharacterNames.Aurelia);
+            PrototypeGacha.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyAstra,
+                PrototypeCharacterNames.Aurelia);
+            PrototypeSession.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyAstra,
+                PrototypeCharacterNames.Aurelia);
+        }
+        if (version < 6)
+        {
+            PrototypeProgression.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyBrakk,
+                PrototypeCharacterNames.Kronos);
+            PrototypeGacha.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyBrakk,
+                PrototypeCharacterNames.Kronos);
+            PrototypeSession.MigrateCharacterName(
+                PrototypeCharacterNames.LegacyBrakk,
+                PrototypeCharacterNames.Kronos);
         }
         PlayerPrefs.SetInt(VersionKey, CurrentVersion);
         PlayerPrefs.Save();

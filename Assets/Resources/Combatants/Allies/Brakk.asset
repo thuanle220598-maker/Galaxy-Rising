@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4d93c40d65fe4d0f8a2e0ab4bc2cf1d7, type: 3}
   m_Name: Brakk
   m_EditorClassIdentifier: Assembly-CSharp::CombatantDefinition
-  displayName: Brakk
-  species: 6
+  displayName: Kronos
+  species: 3
   combatClass: 1
   rarity: 0
-  bodyColor: {r: 0.3, g: 0.75, b: 0.52, a: 1}
+  bodyColor: {r: 0.48, g: 0.2, b: 0.72, a: 1}
   maxHealth: 225
   attack: 19
   defense: 12
@@ -24,3 +24,77 @@ MonoBehaviour:
   attackInterval: 1.2
   skillKit: 8
   formationOrder: 4
+  skillDefinition: {fileID: 0}
+  sourceFacesLeft: 0
+  idleFrames:
+  - {fileID: -1662334614252721982, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  - {fileID: -8368549183527585807, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  - {fileID: -6067556939598703459, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  - {fileID: 5539484352860367095, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  - {fileID: 5701440449689906067, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  - {fileID: 6264797835932566493, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  - {fileID: -5864772538350523117, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  - {fileID: -1384905162797021390, guid: 50d80f15565679a869b2ef2eb0cddda1, type: 3}
+  runFrames:
+  - {fileID: -7093903010975510767, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  - {fileID: 1923714531091660869, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  - {fileID: 8239126566299541556, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  - {fileID: 9203814806464208135, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  - {fileID: 9218154429804029835, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  - {fileID: -4130930251351070201, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  - {fileID: 4873472811088856106, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  - {fileID: 6082386257225305114, guid: 0f2e09fca2a0d1ef4ae2eadee9a87691, type: 3}
+  attackFrames:
+  - {fileID: -2242631536212715666, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  - {fileID: 7546534743258071463, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  - {fileID: 5851461415097487130, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  - {fileID: -4550997635465665704, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  - {fileID: 1044172190793813478, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  - {fileID: -3537122421140605699, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  - {fileID: -5340220292435884630, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  - {fileID: 4645522209003768084, guid: 34c3ffc29967b2ddbb10b850fd60f50c, type: 3}
+  skillFrames:
+  - {fileID: -6058993784224596353, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: 4364859185934953075, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: 1604447685256477327, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: 562941366576359632, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: 1275547372993367523, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: 8651535865319361600, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: 3760620482860897789, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: -5924110850690980496, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: -7670107061413283812, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: 8805260080318309689, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: -3839512273784531015, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  - {fileID: -2979624454357979712, guid: 814bbfc1f2214b1539c8e1c238e056de, type: 3}
+  ultimateFrames:
+  - {fileID: 862266181931542170, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: 4513422951034041080, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: 7323978833170256878, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: 2713851218559479101, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: -8032528808698005170, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: -7204789374357451738, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: -6833047160946705998, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: -2483134511144045735, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: -4620062292514224153, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: 6418724351529089994, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: -6804746862056416473, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: -989560683245129954, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: 7698446721340953350, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  - {fileID: 5504138788851881940, guid: 02c68a1556072f741bda5bbd3aff3aef, type: 3}
+  hitFrames:
+  - {fileID: -1737985335928904844, guid: 25ec00a500e5c49bfb6a43dc2b0aedd0, type: 3}
+  - {fileID: -3101982500626890524, guid: 25ec00a500e5c49bfb6a43dc2b0aedd0, type: 3}
+  - {fileID: -4386388597019074885, guid: 25ec00a500e5c49bfb6a43dc2b0aedd0, type: 3}
+  - {fileID: -74585174905405593, guid: 25ec00a500e5c49bfb6a43dc2b0aedd0, type: 3}
+  - {fileID: 3902723631033264125, guid: 25ec00a500e5c49bfb6a43dc2b0aedd0, type: 3}
+  deathFrames:
+  - {fileID: 7871905730928890643, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: 6856822523335942946, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: -1723273578437899664, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: -5161873359749920505, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: -3754553734613395382, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: -5733696111428084533, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: 6580458606467016474, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: -7813222812643091372, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: 730643865920924280, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
+  - {fileID: -3297102453803063460, guid: 3b7279516240e8395bb475ece95c606f, type: 3}
